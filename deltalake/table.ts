@@ -1,14 +1,81 @@
+interface AWSConfigKey {
+    /**
+     * Locking provider to use for safe atomic rename.
+     * `dynamodb` is currently the only supported locking provider.
+     * If not set, safe atomic rename is not available.
+     */
+    AWS_S3_LOCKING_PROVIDER?: 'dynamodb';
+
+    /**
+     * The role to assume for S3 access.
+     */
+    AWS_S3_ASSUME_ROLE_ARN?: string;
+
+    /**
+     * The role session name to use when a role is assumed. If not provided a random session name is generated.
+     */
+    AWS_S3_ROLE_SESSION_NAME?: string;
+}
+
+export interface AWSConfigKeyCredentials extends AWSConfigKey {
+    /**
+     * The AWS_ACCESS_KEY_ID to use for S3.
+     */
+    AWS_ACCESS_KEY_ID?: string;
+
+    /**
+     * The AWS_SECRET_ACCESS_KEY to use for S3.
+     */
+    AWS_SECRET_ACCESS_KEY?: string;
+
+    /**
+     * The AWS_SESSION_TOKEN to use for S3.
+     */
+    AWS_SESSION_TOKEN?: string;
+}
+
+export interface AWSConfigKeyProfile extends AWSConfigKey {
+    /**
+     * The AWS profile.
+     */
+    AWS_PROFILE?: string;
+}
+
+interface DeltaTableOptions {
+    /**
+     * Specify the version to load.
+     */
+    version?: number;
+
+    /**
+     * Specify a timestamp from which to load.
+     */
+    timestamp?: Date;
+
+    /**
+     * Indicates whether DeltaTable should track files.
+     * 
+     * Some append-only applications might have no need of tracking any files.
+     * Hence, DeltaTable will be loaded with significant memory reduction.
+     */
+    withoutFiles?: boolean;
+
+    /**
+     * Set options used to initialize storage backend.
+     */
+    storageOptions?: AWSConfigKeyCredentials|AWSConfigKeyProfile;
+}
+
 abstract class DeltaTable {
     /**
      * Create the Delta table from a path with an optional version.
-     * Multiple StorageBackends are currently supported: AWS S3 and and local URI.
-     * Depending on the storage backend used, you could provide options values using the `storageOptions` parameter.
+     * Multiple StorageBackends are currently supported: AWS S3 and local URI.
+     * Depending on the storage backend used, you could provide options values using the `options` parameter.
      * 
      * @param tableUri Path of the Delta table
-     * @param version Version of the Delta table
-     * @param storageOptions an object of the options to use for the storage backend
+     * @param options an object of the options to use for the storage backend
      */
-    constructor(tableUri: string, version?: number, storageOptions?: Record<string, any>) {}
+    constructor(tableUri: string, options?: DeltaTableOptions) {}
 
     /**
      * Get the version of the Delta table.
