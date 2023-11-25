@@ -210,15 +210,13 @@ abstract class Schema {
      */
     public abstract toJSON(): string;
 
-    // /**
-    //  * Create a new Schema from a JSON format as a StructType.
-    //  * 
-    //  * Schema.fromJSON('{ "type": "struct", "fields": [{"name": "x", "type": "integer", "nullable": true, "metadata": {}}] }')
-    //  * Returns Schema([Field("x", PrimitiveType("integer"), nullable=True)])
-    //  */
-    // public static fromJSON(schema: string): Schema {
-    //     return;
-    // };
+    /**
+     * Create a new Schema from a JSON format as a StructType.
+     * 
+     * Schema.fromJSON('{ "type": "struct", "fields": [{"name": "x", "type": "integer", "nullable": true, "metadata": {}}] }')
+     * Returns Schema([Field("x", PrimitiveType("integer"), nullable=True)])
+     */
+    // public static fromJSON(schema: string): Schema;
 
     /**
      * Return the equivalent Arrow schema.
