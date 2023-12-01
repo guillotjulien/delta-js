@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use deltalake::{DeltaTableError, protocol::Stats, Schema};
-use neon::prelude::*;
+use deltalake::{DeltaTableError, protocol::{Stats, ColumnValueStat}, Schema};
+use neon::{prelude::*, types::Value};
 
 struct RawDeltaTable {
     _table: deltalake::DeltaTable,
@@ -33,6 +33,46 @@ impl RawDeltaTable {
         let table = rt().block_on(builder.load()).unwrap(); // TODO: Throw error properly instead of crashing in Rust: NotATable("No snapshot or version 0 found, perhaps /home/julien/projects/testing/delta-js/test-table-2/ is an empty dir?")
 
         Ok(RawDeltaTable { _table: table })
+    }
+}
+
+fn get_column_value<'a, 'outer>(mut cx: ComputeContext<'a, 'outer>, stats: HashMap<String, &ColumnValueStat>) -> Result<neon::handle::Handle<'a, JsObject>, neon::result::Throw> {
+    let result = cx.empty_object();
+
+    for (k, stat) in stats {
+        let key = &k[..];
+
+        if !stat.as_column().is_none() {
+            let column: HashMap<String, &ColumnValueStat> = stat.as_column().unwrap().iter().map(|(k, v)| (k.to_owned(), v)).collect();
+            let value = cx.compute_scoped(|cx| get_column_value(cx, column)).unwrap();
+            result.set(&mut cx, key, value).unwrap();
+        } else {
+            let value = cx.compute_scoped(|cx| get_stat_value(cx, stat)).unwrap();
+            result.set(&mut cx, key, value).unwrap();
+        }
+    }
+
+    Ok(result)
+}
+
+fn get_stat_value<'a, 'outer>(mut cx: ComputeContext<'a, 'outer>, stat: &ColumnValueStat) -> Result<neon::handle::Handle<'a, JsValue>, neon::result::Throw> {
+    if stat.as_column().is_some() {
+        return Ok(cx.null().as_value(&mut cx)); // FIXME: Should throw an error in the future
+    }
+
+    let value = stat.as_value().unwrap();
+
+    match value {
+        serde_json::value::Value::Null => Ok(cx.null().as_value(&mut cx)),
+        serde_json::value::Value::Bool(_) => Ok(cx.boolean(value.as_bool().unwrap()).as_value(&mut cx)),
+        serde_json::value::Value::Number(_) => Ok(cx.number(value.as_number().unwrap().as_f64().unwrap()).as_value(&mut cx)),
+        serde_json::value::Value::String(_) => Ok(cx.string(value.as_str().unwrap()).as_value(&mut cx)),
+        serde_json::value::Value::Array(_) => {
+            return Ok(cx.null().as_value(&mut cx));
+        }
+        serde_json::value::Value::Object(_) => {
+            return Ok(cx.null().as_value(&mut cx));
+        }
     }
 }
 
@@ -150,22 +190,42 @@ impl RawDeltaTable {
             let js_min_values = cx.empty_object();
             for (k, v) in stat.min_values {
                 let key = &k[..];
-                let value = cx.string(v.as_value().unwrap().as_str().unwrap()); // FIXME: v.as_value() doesn't work when we have Column({ "key": Value(String("")) }) instead of Value(String("")
-                js_min_values.set(&mut cx, key, value).unwrap();
+                
+                if !v.as_column().is_none() {
+                    let column: HashMap<String, &ColumnValueStat> = v.as_column().unwrap().iter().map(|(k, v)| (k.to_owned(), v)).collect();
+                    let value = cx.compute_scoped(|cx| get_column_value(cx, column)).unwrap();
+                    js_min_values.set(&mut cx, key, value).unwrap();
+                } else {
+                    let value = cx.compute_scoped(|cx| get_stat_value(cx, &v)).unwrap();
+                    js_min_values.set(&mut cx, key, value).unwrap();
+                }
             }
 
             let js_max_values = cx.empty_object();
             for (k, v) in stat.max_values {
                 let key = &k[..];
-                let value = cx.string(v.as_value().unwrap().as_str().unwrap());
-                js_max_values.set(&mut cx, key, value).unwrap();
+
+                if !v.as_column().is_none() {
+                    let column: HashMap<String, &ColumnValueStat> = v.as_column().unwrap().iter().map(|(k, v)| (k.to_owned(), v)).collect();
+                    let value = cx.compute_scoped(|cx| get_column_value(cx, column)).unwrap();
+                    js_max_values.set(&mut cx, key, value).unwrap();
+                } else {
+                    let value = cx.compute_scoped(|cx| get_stat_value(cx, &v)).unwrap();
+                    js_max_values.set(&mut cx, key, value).unwrap();
+                }
             }
 
             let js_null_count = cx.empty_object();
             for (k, v) in stat.null_count {
                 let key = &k[..];
-                let value = cx.number(v.as_value().unwrap() as f64);
-                js_null_count.set(&mut cx, key, value).unwrap();
+                
+                if !v.as_column().is_none() {
+                    // Option<&HashMap<String, ColumnCountStat>>
+                } else {
+                    // Option<i64>
+                    let value = cx.number(v.as_value().unwrap() as f64);
+                    js_null_count.set(&mut cx, key, value).unwrap();
+                }
             }
 
             obj.set(&mut cx, "numRecords", js_num_records).unwrap();
