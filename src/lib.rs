@@ -1,15 +1,10 @@
-use std::convert::TryFrom;
+use std::collections::HashMap;
 
-use deltalake::{PartitionFilter, DeltaTableError, protocol::Stats};
+use deltalake::{DeltaTableError, protocol::Stats};
 use neon::prelude::*;
 
 struct RawDeltaTable {
     _table: deltalake::DeltaTable,
-}
-
-enum PartitionFilterValue<'a> {
-    Single(&'a str),
-    Multiple(Vec<&'a str>),
 }
 
 // Clean-up when RawDeltaTable is garbage collected.
@@ -17,16 +12,20 @@ impl Finalize for RawDeltaTable {}
 
 // Internal Implementation
 impl RawDeltaTable {
-    fn new<'a, C>(_cx: &mut C, table_uri: String, version: Option<i64>/* , storage_options: Option<HashMap<String, String>> */) -> Result<Self, ()>
+    fn new<'a, C>(_cx: &mut C, table_uri: String, version: Option<i64>, without_files: Option<bool>, storage_options: Option<HashMap<String, String>>) -> Result<Self, ()>
     where C: Context<'a> {
         let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri);
 
-        // let options = storage_options.clone().unwrap_or_default();
-        // if let Some(storage_options) = storage_options {
-        //     builder = builder.with_storage_options(storage_options)
-        // }
         if let Some(version) = version {
             builder = builder.with_version(version);
+        }
+
+        if let Some(_) = without_files {
+            builder = builder.without_files();
+        }
+
+        if let Some(storage_options) = storage_options {
+            builder = builder.with_storage_options(storage_options)
         }
 
         // FIXME: Likely, new shouldn't load the table in new DeltaTable, b/c that would be an async operation
@@ -45,15 +44,47 @@ impl RawDeltaTable {
     /// Depending on the storage backend used, you could provide options values using the `storageOptions` parameter.
     fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<RawDeltaTable>> {
         let table_uri: String = cx.argument::<JsString>(0)?.value(&mut cx);
-        let maybe_version = cx.argument_opt(1);
+        let maybe_options = cx.argument_opt(1).map(|o| o.downcast::<JsObject, _>(&mut cx).unwrap());
+        
+        let mut maybe_version: Option<i64> = None;
+        let mut maybe_without_files: Option<bool> = None;
+        let mut maybe_storage_options: Option<HashMap<String, String>> = None;
+        if let Some(handle) = maybe_options {
+            let keys = handle.get_own_property_names(&mut cx).unwrap();
+            
+            for i in 0..keys.len(&mut cx) {
+                let key = keys.get::<JsString, _, _>(&mut cx, i).unwrap().value(&mut cx);
+                let value_handle = handle.get::<JsValue, _, _>(&mut cx, key.as_str()).unwrap();
+                
+                match key.as_str() {
+                    "version" => {
+                        maybe_version = Some(value_handle.downcast::<JsNumber, _>(&mut cx).unwrap().value(&mut cx) as i64);
+                    },
+                    "withoutFiles" => {
+                        maybe_without_files = Some(value_handle.downcast::<JsBoolean, _>(&mut cx).unwrap().value(&mut cx));
+                    },
+                    "storageOptions" => {
+                        let handle = handle.get::<JsObject, _, _>(&mut cx, key.as_str()).unwrap();
+                        let keys = handle.get_own_property_names(&mut cx).unwrap();
+                        
+                        let mut values: HashMap<String, String> = HashMap::new();
+                        for i in 0..keys.len(&mut cx) {
+                            let key = keys.get::<JsString, _, _>(&mut cx, i).unwrap().value(&mut cx);
+                            let value_handle = handle.get::<JsValue, _, _>(&mut cx, key.as_str()).unwrap();
+                            values.insert(key, value_handle.downcast::<JsString, _>(&mut cx).unwrap().value(&mut cx));
+                        }
 
-        let mut version: Option<i64> = None;
-        if let Some(handle) = maybe_version {
-            let string_version = handle.to_string(&mut cx)?.value(&mut cx);
-            version = string_version.parse::<i64>().ok();
+                        maybe_storage_options = Some(values);
+                    },
+                    _ => {
+                        // TODO: Unknown option, throw
+                    }
+                }
+            }
+
         }
 
-        let table = RawDeltaTable::new(&mut cx, table_uri, version).unwrap();
+        let table = RawDeltaTable::new(&mut cx, table_uri, maybe_version, maybe_without_files, maybe_storage_options).unwrap();
 
         Ok(cx.boxed(table))
     }
@@ -89,9 +120,6 @@ impl RawDeltaTable {
     /// 
     /// The paths are as they are saved in the delta log, which may either be
     /// relative to the table root or absolute URIs.
-    /// 
-    /// Use the partition_filters parameter to retrieve a subset of files that match the
-    /// given filters.
     fn js_file_uris(mut cx: FunctionContext) -> JsResult<JsArray> {
         let table = cx.this().downcast_or_throw::<JsBox<RawDeltaTable>, _>(&mut cx).or_else(|err| cx.throw_error(err.to_string()))?;
         let files: Vec<String> = table._table.get_file_uris().collect();

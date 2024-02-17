@@ -1,7 +1,18 @@
 const { rawDeltaTableNew, rawDeltaTableVersion, rawDeltaTableFileUris, rawDeltaTableStats } = require("./index.node");
 const duckdb = require('duckdb');
 
-const table = rawDeltaTableNew('./test-64-files');
+const table = rawDeltaTableNew(
+    './test-64-files',
+    // {
+    //     version: 0,
+    //     withoutFiles: true,
+    //     storageOptions: {
+    //         AWS_ACCESS_KEY_ID: '',
+    //         AWS_SECRET_ACCESS_KEY: '',
+    //         AWS_SESSION_TOKEN: '',
+    //     },
+    // },
+);
 
 console.log("version:", rawDeltaTableVersion.call(table));
 
@@ -18,11 +29,21 @@ stats.forEach((s, i) => {
     }
 });
 
-console.log("matching files: ", indexes.map((i) => fileUris[i])); // Can (& most likely will) be multiple files
+const matchingFiles = indexes.map((i) => fileUris[i]);
+
+console.log("matching files: ", matchingFiles); // Can (& most likely will) be multiple files
 
 // Can then read the Parquet file using DuckDB
 const db = new duckdb.Database(':memory:');
-db.all(`select * from '${fileUris[0]}' where _c0 = '100088'`, (err, res) => {
+// db.all(`select * from parquet_metadata('${matchingFiles[0]}')`, (err, res) => {
+//     if (err) {
+//         throw err;
+//     }
+
+//     console.log(res);
+// });
+
+db.all(`select * from read_parquet([${matchingFiles.map((f) => `'${f}'`).join(',')}]) where _c0 = '100088'`, (err, res) => {
     if (err) {
         throw err;
     }
