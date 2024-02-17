@@ -1,6 +1,13 @@
 import { DeltaTable } from '../index.js';
 
-const table = new DeltaTable('../test-64-files');
+const table = new DeltaTable('s3://...', {
+    storageOptions: {
+        awsRegion: '',
+        awsAccessKeyId: '',
+        awsSecretAccessKey: '',
+    },
+});
+
 await table.load();
 
 console.log(table.version());

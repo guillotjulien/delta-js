@@ -8,14 +8,14 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
-napi = { version = "2.12.2", default-features = false, features = ["napi4", "tokio_rt"] }
-napi-derive = "2.12.2"
+napi = { version = "2.15.1", default-features = false, features = ["napi8", "tokio_rt"] }
+napi-derive = "2.15.0"
 deltalake = { version = "0.16.2", features = ["s3"] }
 futures = "0.3"
 tokio = { version = "1.33.0" }
 serde = "1.0.192"
 serde_json = "1.0.108"
-duckdb = { version = "0.9.2", features = ["bundled"] }
+duckdb = { version = "0.9.2", features = ["bundled", "httpfs", "parquet"] }
 arrow-json = "49.0.0"
 
 [build-dependencies]
