@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use deltalake::{DeltaTableError, protocol::Stats};
+use deltalake::{DeltaTableError, protocol::Stats, Schema};
 use neon::prelude::*;
 
 struct RawDeltaTable {
@@ -44,7 +44,7 @@ impl RawDeltaTable {
     /// Depending on the storage backend used, you could provide options values using the `storageOptions` parameter.
     fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<RawDeltaTable>> {
         let table_uri: String = cx.argument::<JsString>(0)?.value(&mut cx);
-        let maybe_options = cx.argument_opt(1).map(|o| o.downcast::<JsObject, _>(&mut cx).unwrap());
+        let maybe_options = cx.argument_opt(1).map(|o| o.downcast_or_throw::<JsObject, _>(&mut cx).unwrap());
         
         let mut maybe_version: Option<i64> = None;
         let mut maybe_without_files: Option<bool> = None;
@@ -58,10 +58,10 @@ impl RawDeltaTable {
                 
                 match key.as_str() {
                     "version" => {
-                        maybe_version = Some(value_handle.downcast::<JsNumber, _>(&mut cx).unwrap().value(&mut cx) as i64);
+                        maybe_version = Some(value_handle.downcast_or_throw::<JsNumber, _>(&mut cx).unwrap().value(&mut cx) as i64);
                     },
                     "withoutFiles" => {
-                        maybe_without_files = Some(value_handle.downcast::<JsBoolean, _>(&mut cx).unwrap().value(&mut cx));
+                        maybe_without_files = Some(value_handle.downcast_or_throw::<JsBoolean, _>(&mut cx).unwrap().value(&mut cx));
                     },
                     "storageOptions" => {
                         let handle = handle.get::<JsObject, _, _>(&mut cx, key.as_str()).unwrap();
@@ -71,7 +71,7 @@ impl RawDeltaTable {
                         for i in 0..keys.len(&mut cx) {
                             let key = keys.get::<JsString, _, _>(&mut cx, i).unwrap().value(&mut cx);
                             let value_handle = handle.get::<JsValue, _, _>(&mut cx, key.as_str()).unwrap();
-                            values.insert(key, value_handle.downcast::<JsString, _>(&mut cx).unwrap().value(&mut cx));
+                            values.insert(key, value_handle.downcast_or_throw::<JsString, _>(&mut cx).unwrap().value(&mut cx));
                         }
 
                         maybe_storage_options = Some(values);
@@ -181,20 +181,14 @@ impl RawDeltaTable {
         Ok(a)
     }
 
-    // fn js_schema(mut cx: FunctionContext) -> JsResult<JsObject> {
-    //     let table = cx.this().downcast_or_throw::<JsBox<RawDeltaTable>, _>(&mut cx).or_else(|err| cx.throw_error(err.to_string()))?;
-    //     let schema: &deltalake::Schema = table._table.get_schema().unwrap();
+    fn js_schema(mut cx: FunctionContext) -> JsResult<JsString> {
+        let table = cx.this().downcast_or_throw::<JsBox<RawDeltaTable>, _>(&mut cx).or_else(|err| cx.throw_error(err.to_string()))?;
+        let schema: &Schema = table._table.get_schema().unwrap();
 
-    //     let fields: Vec<SchemaField> = schema
-    //         .get_fields()
-    //         .iter()
-    //         .map(|field| SchemaField {
-    //             inner: field.clone(),
-    //         })
-    //         .collect();
+        let schema_string = serde_json::to_string(schema).unwrap();
 
-    //     Ok()
-    // }
+        Ok(cx.string(schema_string))
+    }
 
     // fn js_to_array(mut cx: FunctionContext) -> JsResult<JsPromise> {
     //     let table = cx.this().downcast_or_throw::<JsBox<RawDeltaTable>, _>(&mut cx)?;
@@ -223,7 +217,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     cx.export_function("rawDeltaTableNew", RawDeltaTable::js_new)?;
     cx.export_function("rawDeltaTableVersion", RawDeltaTable::js_version)?;
-    // cx.export_function("rawDeltaTableSchema", RawDeltaTable::js_schema)?;
+    cx.export_function("rawDeltaTableSchema", RawDeltaTable::js_schema)?;
     // cx.export_function("rawDeltaTableToArray", RawDeltaTable::js_to_array)?;
     cx.export_function("rawDeltaTableFiles", RawDeltaTable::js_files)?;
     cx.export_function("rawDeltaTableFileUris", RawDeltaTable::js_file_uris)?;
