@@ -107,7 +107,7 @@ dependencies = [
  "arrow-csv",
  "arrow-data 47.0.0",
  "arrow-ipc",
- "arrow-json",
+ "arrow-json 47.0.0",
  "arrow-ord 47.0.0",
  "arrow-row 47.0.0",
  "arrow-schema 47.0.0",
@@ -322,6 +322,26 @@ dependencies = [
  "arrow-cast 47.0.0",
  "arrow-data 47.0.0",
  "arrow-schema 47.0.0",
+ "chrono",
+ "half",
+ "indexmap",
+ "lexical-core",
+ "num",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "arrow-json"
+version = "49.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82565c91fd627922ebfe2810ee4e8346841b6f9361b87505a9acea38b614fee"
+dependencies = [
+ "arrow-array 49.0.0",
+ "arrow-buffer 49.0.0",
+ "arrow-cast 49.0.0",
+ "arrow-data 49.0.0",
+ "arrow-schema 49.0.0",
  "chrono",
  "half",
  "indexmap",
@@ -806,6 +826,7 @@ dependencies = [
 name = "delta-js_delta-js"
 version = "0.0.0"
 dependencies = [
+ "arrow-json 49.0.0",
  "deltalake",
  "duckdb",
  "futures",

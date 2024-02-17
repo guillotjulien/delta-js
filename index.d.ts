@@ -29,5 +29,5 @@ export class DeltaTable {
   version(): number
   /** Get the current schema of the Delta table. */
   schema(): string
-  query(query: string): Promise<void>
+  query(query: string): Promise<Buffer>
 }

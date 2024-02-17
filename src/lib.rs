@@ -2,14 +2,15 @@
 
 use std::sync::{Arc, Mutex};
 
-use duckdb::{arrow::{record_batch::RecordBatch, util::pretty::print_batches}, Connection, params};
+use arrow_json::writer::record_batches_to_json_rows;
+use duckdb::{arrow::record_batch::RecordBatch, Connection};
 use napi::{Task, Result, Env, JsUndefined};
-use napi::bindgen_prelude::AsyncTask;
+use napi::bindgen_prelude::{AsyncTask, Buffer};
 
 #[macro_use]
 extern crate napi_derive;
 
-#[napi(object)]
+#[napi(object, js_name = "DeltaTableOptions")]
 #[derive(Debug, Clone)]
 pub struct JsDeltaTableOptions {
   // FIXME: How can we combine version<i64> and version<timestamp>? retry with an enum?
@@ -93,7 +94,7 @@ impl DeltaTable {
   }
 
   #[napi]
-  pub async fn query(&self, query: String) -> Result<()> { // FIXME: Result<Buffer>
+  pub async fn query(&self, query: String) -> Result<Buffer> {
     let table = self.table.lock().unwrap();
     let files = table.get_file_uris()
       .map(|f| format!("'{}'", f.to_string()))
@@ -102,15 +103,20 @@ impl DeltaTable {
 
     let db = Connection::open_in_memory().map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    db.execute_batch(format!("INSTALL parquet; LOAD parquet; CREATE VIEW delta_table AS SELECT * from read_parquet([{}]);", files).as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    // Views are lazy evaluated, so we can use predicate pushdown and not read all parquet files
+    db.execute_batch(format!("CREATE VIEW delta_table AS SELECT * from read_parquet([{}]);", files).as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    let rbs: Vec<RecordBatch> = db.prepare(query.as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?
+    let batches: Vec<RecordBatch> = db.prepare(query.as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?
       .query_arrow([]).map_err(|err| napi::Error::from_reason(err.to_string()))?
       .collect();
-  
-    assert!(print_batches(&rbs).is_ok());
 
-    Ok(())
+    // Would be better if we can skip the string part altogether and directly work with bytes - but for now that's good enough
+    let t: Vec<&RecordBatch> = batches.iter().collect();
+    let res = record_batches_to_json_rows(&t[..]).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    let output = serde_json::to_vec(&res).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    Ok(output.into())
   }
 }
 
