@@ -13,10 +13,7 @@ const stats = rawDeltaTableStats.call(table);
 
 const indexes = [];
 stats.forEach((s, i) => {
-    console.log("Min match?", s.minValues._c0, s.minValues._c0.localeCompare("100088") >= 0);
-    console.log("Max match?", s.maxValues._c0, s.maxValues._c0.localeCompare("100088") <= 0);
-
-    if (s.minValues._c0.localeCompare("100088") >= 0) {
+    if ("100088".localeCompare(s.minValues._c0) >= 0) { // Our value is w/in boundaries
         indexes.push(i);
     }
 });
@@ -25,7 +22,7 @@ console.log("matching files: ", indexes.map((i) => fileUris[i])); // Can (& most
 
 // Can then read the Parquet file using DuckDB
 const db = new duckdb.Database(':memory:');
-db.all(`select * from '${fileUris[0]}'`, (err, res) => {
+db.all(`select * from '${fileUris[0]}' where _c0 = '100088'`, (err, res) => {
     if (err) {
         throw err;
     }

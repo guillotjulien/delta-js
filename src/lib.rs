@@ -122,7 +122,7 @@ impl RawDeltaTable {
             let js_min_values = cx.empty_object();
             for (k, v) in stat.min_values {
                 let key = &k[..];
-                let value = cx.string(v.as_value().unwrap().as_str().unwrap());
+                let value = cx.string(v.as_value().unwrap().as_str().unwrap()); // FIXME: v.as_value() doesn't work when we have Column({ "key": Value(String("")) }) instead of Value(String("")
                 js_min_values.set(&mut cx, key, value).unwrap();
             }
 
