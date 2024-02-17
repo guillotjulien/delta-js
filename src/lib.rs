@@ -144,7 +144,13 @@ impl DeltaTable {
 
     if let Some(storage_options) = storage_options {
       if storage_options.len() > 0 {
-        db.execute_batch(format!("SET s3_region='{}'; SET s3_access_key_id='{}'; SET s3_secret_access_key='{}'", storage_options.get("aws_region").unwrap(), storage_options.get("aws_access_key_id").unwrap(), storage_options.get("aws_secret_access_key").unwrap()).as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+        let mut query = format!("SET s3_region='{}'; SET s3_access_key_id='{}'; SET s3_secret_access_key='{}'", storage_options.get("aws_region").unwrap(), storage_options.get("aws_access_key_id").unwrap(), storage_options.get("aws_secret_access_key").unwrap());
+
+        if storage_options.get("aws_session_token") != None {
+          query = format!("{}; SET s3_session_token='{}'", query, storage_options.get("aws_session_token").unwrap());
+        }
+
+        db.execute_batch(query.as_str()).map_err(|err| napi::Error::from_reason(err.to_string()))?;
       }
     }
 
