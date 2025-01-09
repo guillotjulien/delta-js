@@ -17,13 +17,13 @@ export interface DeltaTableOptions {
   /** Set options used to initialize storage backend. */
   storageOptions?: AWSConfigKeyCredentials | AWSConfigKeyProfile
 }
-export interface AWSConfigKeyCredentials {
+export interface AwsConfigKeyCredentials {
   awsRegion: string
   awsAccessKeyId: string
   awsSecretAccessKey: string
   awsSessionToken?: string
 }
-export interface AWSConfigKeyProfile {
+export interface AwsConfigKeyProfile {
   awsRegion: string
   awsProfile: string
 }

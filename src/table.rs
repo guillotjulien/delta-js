@@ -4,9 +4,9 @@ use std::sync::Arc;
 use napi::{Result, Either};
 use tokio::sync::Mutex;
 
-#[napi(object, js_name = "DeltaTableOptions")]
+#[napi(object)]
 #[derive(Clone)]
-pub struct JsDeltaTableOptions {
+pub struct DeltaTableOptions {
   /// Specify the version to load either as an integer or an ISO-8601/RFC-3339 timestamp.
   pub version: Option<Either<i64, String>>,
 
@@ -21,7 +21,7 @@ pub struct JsDeltaTableOptions {
   pub storage_options: Option<Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>>,
 }
 
-#[napi(object, js_name = "AWSConfigKeyCredentials")]
+#[napi(object)]
 #[derive(Clone)]
 pub struct AWSConfigKeyCredentials {
   pub aws_region: String,
@@ -30,7 +30,7 @@ pub struct AWSConfigKeyCredentials {
   pub aws_session_token: Option<String>,
 }
 
-#[napi(object, js_name = "AWSConfigKeyProfile")]
+#[napi(object)]
 #[derive(Clone)]
 pub struct AWSConfigKeyProfile {
   pub aws_region: String,
@@ -57,7 +57,7 @@ impl DeltaTable {
   /// 
   /// * `tableUri` - Path of the Delta table
   /// * `options` - an object of the options to use for the storage backend
-  pub fn new(table_uri: String, options: Option<JsDeltaTableOptions>) -> Result<Self> {
+  pub fn new(table_uri: String, options: Option<DeltaTableOptions>) -> Result<Self> {
     let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
     let mut table_storage_options: Option<HashMap<String, String>> = None;
 
