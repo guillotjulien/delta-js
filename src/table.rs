@@ -40,7 +40,6 @@ pub struct AWSConfigKeyProfile {
 #[napi]
 pub struct DeltaTable {
   table: Arc<Mutex<deltalake::DeltaTable>>,
-  storage_options: Option<HashMap<String, String>>,
 }
 
 #[napi]
@@ -66,7 +65,6 @@ impl DeltaTable {
     // deltalake_mount::register_handlers(None);
 
     let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
-    let mut table_storage_options: Option<HashMap<String, String>> = None;
 
     if let Some(options) = options.clone() {
       if let Some(version) = options.version {
@@ -88,16 +86,13 @@ impl DeltaTable {
 
       if let Some(storage_options) = options.storage_options {
         let options = get_storage_options(storage_options);
-
-        table_storage_options = Some(options.clone());
         builder = builder.with_storage_options(options);
       }
     }
 
     let table = Arc::new(Mutex::new(builder.build().map_err(|err| napi::Error::from_reason(err.to_string()))?));
-    let storage_options = table_storage_options.clone();
 
-    Ok(DeltaTable { table, storage_options })
+    Ok(DeltaTable { table })
   }
 
   #[napi]
