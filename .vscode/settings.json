@@ -3,5 +3,8 @@
         "napi-derive": [
             "napi"
         ]
-    }
+    },
+    "cSpell.words": [
+        "napi"
+    ]
 }

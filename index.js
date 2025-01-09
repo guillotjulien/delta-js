@@ -295,6 +295,8 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { DeltaTable } = nativeBinding
+const { DeltaTable, QueryBuilder, QueryResult } = nativeBinding
 
 module.exports.DeltaTable = DeltaTable
+module.exports.QueryBuilder = QueryBuilder
+module.exports.QueryResult = QueryResult
