@@ -21,7 +21,7 @@ pub struct DeltaTableOptions {
   pub storage_options: Option<Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>>,
 }
 
-#[napi(object)]
+#[napi(object, js_name = "AWSConfigKeyCredentials")]
 #[derive(Clone)]
 pub struct AWSConfigKeyCredentials {
   pub aws_region: String,
@@ -30,7 +30,7 @@ pub struct AWSConfigKeyCredentials {
   pub aws_session_token: Option<String>,
 }
 
-#[napi(object)]
+#[napi(object, js_name = "AWSConfigKeyProfile")]
 #[derive(Clone)]
 pub struct AWSConfigKeyProfile {
   pub aws_region: String,
@@ -58,6 +58,13 @@ impl DeltaTable {
   /// * `tableUri` - Path of the Delta table
   /// * `options` - an object of the options to use for the storage backend
   pub fn new(table_uri: String, options: Option<DeltaTableOptions>) -> Result<Self> {
+    // https://github.com/delta-io/delta-rs/blob/0b90a11383dce614be369032062e3e8e78cf95d9/python/src/lib.rs#L2197
+    deltalake::aws::register_handlers(None);
+    // deltalake::azure::register_handlers(None);
+    // deltalake::gcp::register_handlers(None);
+    // deltalake::hdfs::register_handlers(None);
+    // deltalake_mount::register_handlers(None);
+
     let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
     let mut table_storage_options: Option<HashMap<String, String>> = None;
 

@@ -1,12 +1,6 @@
 import { DeltaTable, QueryBuilder } from '../index.js';
 
-const table = new DeltaTable('s3://...', {
-    storageOptions: {
-        awsRegion: '',
-        awsAccessKeyId: '',
-        awsSecretAccessKey: '',
-    },
-});
+const table = new DeltaTable('s3://...', { storageOptions: { awsRegion: 'eu-west-1', awsProfile: 'default' } });
 
 await table.load();
 
