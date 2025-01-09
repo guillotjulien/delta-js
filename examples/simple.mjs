@@ -1,6 +1,6 @@
 import { DeltaTable, QueryBuilder } from '../index.js';
 
-const table = new DeltaTable('s3://...', { storageOptions: { awsRegion: 'eu-west-1', awsProfile: 'default' } });
+const table = new DeltaTable('./test/resources/test-table');
 
 await table.load();
 
@@ -12,3 +12,13 @@ const qb = new QueryBuilder();
 qb.register('test', table);
 
 await qb.sql('select * from test').show();
+
+// let stream = qb.sql('select * from test').stream();
+
+// stream.on('data', (chunk) => {
+//     console.log(chunk.toString());
+// });
+  
+// stream.on('end', () => {
+//     console.log('Stream ended.');
+// });

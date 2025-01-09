@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use napi::{Result, Either};
+use napi::{Either, Result};
 use tokio::sync::Mutex;
 
 #[napi(object)]
@@ -48,12 +48,12 @@ impl DeltaTable {
   /// Create the Delta table from a path with an optional version.
   /// Multiple StorageBackends are currently supported: AWS S3 and local URI.
   /// Depending on the storage backend used, you could provide options values using the `options` parameter.
-  /// 
+  ///
   /// This will not load the log, i.e. the table is not initialized. To get an initialized
   /// table use the `load` function.
-  /// 
+  ///
   /// # Arguments
-  /// 
+  ///
   /// * `tableUri` - Path of the Delta table
   /// * `options` - an object of the options to use for the storage backend
   pub fn new(table_uri: String, options: Option<DeltaTableOptions>) -> Result<Self> {
@@ -71,9 +71,11 @@ impl DeltaTable {
         match version {
           Either::A(version) => {
             builder = builder.with_version(version);
-          },
+          }
           Either::B(version) => {
-            builder = builder.with_datestring(version).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+            builder = builder
+              .with_datestring(version)
+              .map_err(|err| napi::Error::from_reason(err.to_string()))?;
           }
         }
       }
@@ -90,7 +92,11 @@ impl DeltaTable {
       }
     }
 
-    let table = Arc::new(Mutex::new(builder.build().map_err(|err| napi::Error::from_reason(err.to_string()))?));
+    let table = Arc::new(Mutex::new(
+      builder
+        .build()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))?,
+    ));
 
     Ok(DeltaTable { table })
   }
@@ -100,7 +106,10 @@ impl DeltaTable {
   pub async fn load(&self) -> Result<()> {
     let mut table = self.table.lock().await;
 
-    table.load().await.map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    table
+      .load()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
     Ok(())
   }
@@ -120,8 +129,12 @@ impl DeltaTable {
     let schema = table.schema();
 
     match schema {
-      Some(schema) => serde_json::to_string(schema).map_err(|err| napi::Error::from_reason(err.to_string())),
-      None => Err(napi::Error::from_reason("Cannot read table schema. Table is not loaded")),
+      Some(schema) => {
+        serde_json::to_string(schema).map_err(|err| napi::Error::from_reason(err.to_string()))
+      }
+      None => Err(napi::Error::from_reason(
+        "Cannot read table schema. Table is not loaded",
+      )),
     }
   }
 
@@ -130,23 +143,31 @@ impl DeltaTable {
   }
 }
 
-fn get_storage_options(storage_options: Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>) -> HashMap<String, String> {
+fn get_storage_options(
+  storage_options: Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>,
+) -> HashMap<String, String> {
   let mut options: HashMap<String, String> = HashMap::new();
 
   match storage_options {
     Either::A(credentials_options) => {
       options.insert("aws_region".to_string(), credentials_options.aws_region);
-      options.insert("aws_access_key_id".to_string(), credentials_options.aws_access_key_id);
-      options.insert("aws_secret_access_key".to_string(), credentials_options.aws_secret_access_key);
+      options.insert(
+        "aws_access_key_id".to_string(),
+        credentials_options.aws_access_key_id,
+      );
+      options.insert(
+        "aws_secret_access_key".to_string(),
+        credentials_options.aws_secret_access_key,
+      );
 
       if let Some(aws_session_token) = credentials_options.aws_session_token {
         options.insert("aws_session_token".to_string(), aws_session_token);
       }
-    },
+    }
     Either::B(profile_options) => {
       options.insert("aws_region".to_string(), profile_options.aws_region);
       options.insert("aws_profile".to_string(), profile_options.aws_profile);
-    },
+    }
   }
 
   options

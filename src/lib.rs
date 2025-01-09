@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 
-mod table;
 mod query;
+mod table;
 
 #[macro_use]
 extern crate napi_derive;
