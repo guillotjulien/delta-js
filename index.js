@@ -295,8 +295,9 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { DeltaTable, QueryBuilder, QueryResult } = nativeBinding
+const { QueryBuilder, QueryResult, DeltaTable, RustStream } = nativeBinding
 
-module.exports.DeltaTable = DeltaTable
 module.exports.QueryBuilder = QueryBuilder
 module.exports.QueryResult = QueryResult
+module.exports.DeltaTable = DeltaTable
+module.exports.RustStream = RustStream

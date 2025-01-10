@@ -27,6 +27,23 @@ export interface AWSConfigKeyProfile {
   awsRegion: string
   awsProfile: string
 }
+export class QueryBuilder {
+  constructor()
+  /**
+   * Register the given [DeltaTable] into the [SessionContext] using the provided `table_name`
+   *
+   * Once called, the provided `delta_table` will be referenceable in SQL queries so long as
+   * another table of the same name is not registered over it.
+   */
+  register(tableName: string, deltaTable: DeltaTable): QueryBuilder
+  sql(sqlQuery: string): QueryResult
+}
+export class QueryResult {
+  constructor(queryBuilder: QueryBuilder, sqlQuery: string)
+  /** Print the first 25 rows returned by the SQL query */
+  show(): Promise<void>
+  fetchAll(): Promise<void>
+}
 export class DeltaTable {
   /**
    * Create the Delta table from a path with an optional version.
@@ -49,20 +66,7 @@ export class DeltaTable {
   /** Get the current schema of the Delta table. */
   schema(): string
 }
-export class QueryBuilder {
-  constructor()
-  /**
-   * Register the given [DeltaTable] into the [SessionContext] using the provided `table_name`
-   *
-   * Once called, the provided `delta_table` will be referenceable in SQL queries so long as
-   * another table of the same name is not registered over it.
-   */
-  register(tableName: string, deltaTable: DeltaTable): QueryBuilder
-  sql(sqlQuery: string): QueryResult
-}
-export class QueryResult {
-  constructor(queryBuilder: QueryBuilder, sqlQuery: string)
-  /** Print the first 25 rows returned by the SQL query */
-  show(): Promise<void>
-  fetchAll(): Promise<void>
+export class RustStream {
+  constructor(max: number)
+  read(): Buffer | null
 }
