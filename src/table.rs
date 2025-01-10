@@ -4,6 +4,8 @@ use std::sync::Arc;
 use napi::{Either, Result};
 use tokio::sync::Mutex;
 
+use crate::get_runtime;
+
 #[napi(object)]
 #[derive(Clone)]
 pub struct DeltaTableOptions {
@@ -117,7 +119,7 @@ impl DeltaTable {
   #[napi]
   /// Get the version of the Delta table.
   pub fn version(&self) -> Result<i64> {
-    let table = tokio::runtime::Handle::current().block_on(self.table.lock());
+    let table = get_runtime().block_on(self.table.lock());
 
     Ok(table.version())
   }
@@ -125,7 +127,7 @@ impl DeltaTable {
   #[napi]
   /// Get the current schema of the Delta table.
   pub fn schema(&self) -> Result<String> {
-    let table = tokio::runtime::Handle::current().block_on(self.table.lock());
+    let table = get_runtime().block_on(self.table.lock());
     let schema = table.schema();
 
     match schema {

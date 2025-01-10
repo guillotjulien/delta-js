@@ -12,13 +12,3 @@ const qb = new QueryBuilder();
 qb.register('test', table);
 
 await qb.sql('select * from test').show();
-
-// let stream = qb.sql('select * from test').stream();
-
-// stream.on('data', (chunk) => {
-//     console.log(chunk.toString());
-// });
-  
-// stream.on('end', () => {
-//     console.log('Stream ended.');
-// });

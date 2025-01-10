@@ -1,33 +1,20 @@
 import { Readable } from "stream";
-import { RustStream } from "../index.js";
+import { DeltaTable, QueryBuilder } from '../index.js';
 
+const table = new DeltaTable('./test/resources/test-table');
 
-// TODO: Could have a small JS wrapper that wrap .stream() from QueryResult so that we have a Node.js native stream
-function createReadableStream(maxChunks) {
-  const rustStream = new RustStream(maxChunks);
+await table.load();
 
-  return new Readable({
-    objectMode: true,
-    read(size) {
-      try {
-        const chunk = rustStream.read();
-        if (chunk === null) {
-          this.push(null); // End of stream
-        } else {
-          this.push(Buffer.from(chunk)); // Convert napi Buffer to Node.js Buffer
-        }
-      } catch (err) {
-        this.destroy(err);
-      }
-    },
-  });
-}
+const qb = new QueryBuilder();
 
-// Example usage
-const readable = createReadableStream(10);
-readable.on("data", (chunk) => {
-  console.log("Received chunk:", chunk.toString());
+qb.register('test', table);
+
+const stream = Readable.fromWeb(qb.sql('select * from test').stream());
+
+stream.on('data', (chunk) => {
+  console.log('chunk:', chunk.toString());
 });
-readable.on("end", () => {
-  console.log("Stream ended.");
+
+stream.on('end', () => {
+  console.log('stream ended');
 });
