@@ -133,27 +133,29 @@ impl QueryResult {
     std::thread::spawn(move || {
       let mut stream_lock = stream.lock().unwrap();
 
-      let batch = get_runtime()
-        .block_on(stream_lock.try_next())
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
-        .unwrap()
-        .unwrap();
+      while let Some(batch_result) = get_runtime().block_on(stream_lock.try_next()).transpose() {
+        match batch_result {
+          Ok(batch) => {
+            let mut json_writer = json::Writer::<Vec<u8>, LineDelimited>::new(Vec::new());
+            json_writer.write(&batch).unwrap();
 
-      let mut json_writer = json::Writer::<Vec<u8>, LineDelimited>::new(Vec::new());
-      json_writer.write(&batch).unwrap();
-
-      // Collect the JSON bytes
-      let json_bytes = json_writer.into_inner();
-
-      match tx.try_send(Ok(json_bytes)) {
-        Err(TrySendError::Closed(_)) => {
-          panic!("closed");
+            let json_bytes = json_writer.into_inner();
+            if let Err(TrySendError::Closed(_)) = tx.try_send(Ok(json_bytes)) {
+              // No more batches
+              break;
+            }
+          }
+          Err(err) => {
+            // Handle errors during streaming
+            tx.try_send(Err(napi::Error::from_reason(err.to_string())))
+              .ok();
+            break;
+          }
         }
-        Err(TrySendError::Full(_)) => {
-          panic!("queue is full");
-        }
-        Ok(_) => {}
       }
+
+      // Close the sender to signal the end of the stream
+      drop(tx);
     });
 
     ReadableStream::create_with_stream_bytes(&env, ReceiverStream::new(rx))

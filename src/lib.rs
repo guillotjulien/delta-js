@@ -2,7 +2,6 @@ use std::sync::Once;
 use tokio::runtime::Runtime;
 
 mod query;
-mod stream;
 mod table;
 
 #[macro_use]
