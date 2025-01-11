@@ -11,5 +11,10 @@ const qb = new QueryBuilder();
 
 qb.register('test', table);
 
-await qb.sql("select Entity, count(1) as total from test where Entity in ('France', 'Germany') group by Entity").show();
-await qb.sql("select count(*) from test").show();
+const query = qb.sql("select Entity, count(1) as total from test where Entity in ('France', 'Germany') group by Entity");
+
+await query.show();
+
+const result = await query.fetchAll();
+
+console.log(JSON.parse(result));

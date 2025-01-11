@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use deltalake::{
   arrow::{
     array::RecordBatch,
-    json::{self, writer::LineDelimited},
+    json::{self, writer::{JsonArray, LineDelimited}},
     util::pretty::print_batches,
   },
   datafusion::prelude::SessionContext,
@@ -11,7 +11,7 @@ use deltalake::{
 };
 use futures::TryStreamExt;
 use napi::{
-  bindgen_prelude::{BufferSlice, ReadableStream},
+  bindgen_prelude::{Buffer, BufferSlice, ReadableStream},
   Env, Result,
 };
 use serde_json::json;
@@ -42,7 +42,7 @@ impl QueryBuilder {
     QueryBuilder { ctx }
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
   /// Register the given [DeltaTable] into the [SessionContext] using the provided `table_name`
   ///
   /// Once called, the provided `delta_table` will be referenceable in SQL queries so long as
@@ -74,7 +74,8 @@ impl QueryBuilder {
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
+  /// Prepares the sql query to be executed.
   pub fn sql(&self, sql_query: String) -> QueryResult {
     QueryResult {
       query_builder: self.clone(),
@@ -93,7 +94,7 @@ impl QueryResult {
     }
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
   /// Print the first 25 rows returned by the SQL query
   pub async fn show(&self) -> Result<()> {
     let df = self
@@ -117,7 +118,7 @@ impl QueryResult {
     Ok(())
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
   pub fn stream(&self, env: Env) -> Result<ReadableStream<BufferSlice>> {
     let df = get_runtime()
       .block_on(self.query_builder.ctx.sql(self.sql_query.as_str()))
@@ -161,9 +162,19 @@ impl QueryResult {
     ReadableStream::create_with_stream_bytes(&env, ReceiverStream::new(rx))
   }
 
-  #[napi]
-  pub async fn to_array(&self) -> Result<()> {
-    // TODO: Implement
-    Ok(())
+  #[napi(catch_unwind)]
+  pub async fn fetch_all(&self) -> Result<Buffer> {
+    let df = self.query_builder.ctx.sql(self.sql_query.as_str()).await.map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let batches = df.collect().await.map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    let mut json_writer = json::Writer::<Vec<u8>, JsonArray>::new(Vec::new());
+    for batch in batches {
+      json_writer.write(&batch).map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    }
+    json_writer.finish().map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    let json_bytes = json_writer.into_inner();
+
+    Ok(json_bytes.into())
   }
 }

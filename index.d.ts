@@ -43,7 +43,7 @@ export class QueryResult {
   /** Print the first 25 rows returned by the SQL query */
   show(): Promise<void>
   stream(): ReadableStream<Buffer>
-  toArray(): Promise<void>
+  fetchAll(): Promise<Buffer>
 }
 export class DeltaTable {
   /**
