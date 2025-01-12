@@ -102,8 +102,34 @@ impl DeltaTable {
 
     Ok(DeltaTable { table })
   }
+  
+  /// Currently it'll fail if the first entry in your _delta_log is a CRC file.
+  /// See https://github.com/delta-io/delta-rs/issues/3115
+  /// Fix here: https://github.com/delta-io/delta-rs/pull/3122
+  #[napi(catch_unwind)]
+  pub async fn is_delta_table(table_uri: String, storage_options: Option<Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>>) -> Result<bool> {
+    // https://github.com/delta-io/delta-rs/blob/0b90a11383dce614be369032062e3e8e78cf95d9/python/src/lib.rs#L2197
+    deltalake::aws::register_handlers(None);
+    // deltalake::azure::register_handlers(None);
+    // deltalake::gcp::register_handlers(None);
+    // deltalake::hdfs::register_handlers(None);
+    // deltalake_mount::register_handlers(None);
 
-  #[napi]
+    let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
+    if let Some(storage_options) = storage_options {
+      let options = get_storage_options(storage_options);
+      builder = builder.with_storage_options(options);
+    }
+
+    let table = builder.build().map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let is_delta_table = table.verify_deltatable_existence()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    Ok(is_delta_table)
+  }
+
+  #[napi(catch_unwind)]
   /// Build the DeltaTable and load its state
   pub async fn load(&self) -> Result<()> {
     let mut table = self.table.lock().await;
@@ -116,7 +142,7 @@ impl DeltaTable {
     Ok(())
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
   /// Get the version of the Delta table.
   pub fn version(&self) -> Result<i64> {
     let table = get_runtime().block_on(self.table.lock());
@@ -124,7 +150,7 @@ impl DeltaTable {
     Ok(table.version())
   }
 
-  #[napi]
+  #[napi(catch_unwind)]
   /// Get the current schema of the Delta table.
   pub fn schema(&self) -> Result<String> {
     let table = get_runtime().block_on(self.table.lock());

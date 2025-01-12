@@ -36,6 +36,7 @@ export class QueryBuilder {
    * another table of the same name is not registered over it.
    */
   register(tableName: string, deltaTable: DeltaTable): QueryBuilder
+  /** Prepares the sql query to be executed. */
   sql(sqlQuery: string): QueryResult
 }
 export class QueryResult {
@@ -60,6 +61,12 @@ export class DeltaTable {
    * * `options` - an object of the options to use for the storage backend
    */
   constructor(tableUri: string, options?: DeltaTableOptions | undefined | null)
+  /**
+   * Currently it'll fail if the first entry in your _delta_log is a CRC file.
+   * See https://github.com/delta-io/delta-rs/issues/3115
+   * Fix here: https://github.com/delta-io/delta-rs/pull/3122
+   */
+  static isDeltaTable(tableUri: string, storageOptions?: AWSConfigKeyCredentials | AWSConfigKeyProfile | undefined | null): Promise<boolean>
   /** Build the DeltaTable and load its state */
   load(): Promise<void>
   /** Get the version of the Delta table. */
