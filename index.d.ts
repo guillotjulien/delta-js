@@ -27,6 +27,20 @@ export interface AWSConfigKeyProfile {
   awsRegion: string
   awsProfile: string
 }
+export interface DeltaTableMetadata {
+  id: string
+  name?: string
+  description?: string
+  partitionColumns: Array<string>
+  createdTime?: number
+  configuration: Record<string, string | undefined | null>
+}
+export interface DeltaTableProtocolVersions {
+  minReaderVersion: number
+  minWriterVersion: number
+  readerFeatures?: Array<string>
+  writerFeatures?: Array<string>
+}
 export class QueryBuilder {
   constructor()
   /**
@@ -83,8 +97,15 @@ export class DeltaTable {
   static isDeltaTable(tableUri: string, storageOptions?: AWSConfigKeyCredentials | AWSConfigKeyProfile | undefined | null): Promise<boolean>
   /** Build the DeltaTable and load its state */
   load(): Promise<void>
-  /** Get the version of the Delta table. */
+  tableUri(): string
   version(): number
+  getLatestVersion(): Promise<number>
+  getEarliestVersion(): Promise<number>
+  getNumIndexCols(): number
+  getStatsColumns(): Array<string> | null
+  hasFiles(): boolean
+  metadata(): DeltaTableMetadata
+  protocolVersions(): DeltaTableProtocolVersions
   /** Get the current schema of the Delta table. */
   schema(): string
 }

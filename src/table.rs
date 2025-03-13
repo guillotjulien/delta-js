@@ -41,6 +41,24 @@ pub struct AWSConfigKeyProfile {
   pub aws_profile: String,
 }
 
+#[napi(object, js_name = "DeltaTableMetadata")]
+pub struct JsDeltaTableMetadata {
+  pub id: String,
+  pub name: Option<String>,
+  pub description: Option<String>,
+  pub partition_columns: Vec<String>,
+  pub created_time: Option<i64>,
+  pub configuration: HashMap<String, Option<String>>,
+}
+
+#[napi(object, js_name = "DeltaTableProtocolVersions")]
+pub struct JsDeltaTableProtocolVersions {
+  pub min_reader_version: i32,
+  pub min_writer_version: i32,
+  pub reader_features: Option<Vec<String>>,
+  pub writer_features: Option<Vec<String>>,
+}
+
 #[napi(js_name = "DeltaTable")]
 pub struct JsDeltaTable {
   table: Arc<Mutex<DeltaTable>>,
@@ -157,27 +175,134 @@ impl JsDeltaTable {
   }
 
   #[napi(catch_unwind)]
-  /// Get the version of the Delta table.
-  pub fn version(&self) -> Result<i64> {
-    let table = get_runtime().block_on(self.table.lock());
+  pub fn table_uri(&self) -> Result<String> {
+    self.with_table(|t| Ok(t.table_uri()))
+  }
 
-    Ok(table.version())
+  #[napi(catch_unwind)]
+  pub fn version(&self) -> Result<i64> {
+    self.with_table(|t| Ok(t.version()))
+  }
+
+  #[napi(catch_unwind)]
+  pub async fn get_latest_version(&self) -> Result<i64> {
+    let table = self.table.lock().await;
+    table
+      .get_latest_version()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))
+  }
+
+  #[napi(catch_unwind)]
+  pub async fn get_earliest_version(&self) -> Result<i64> {
+    let table = self.table.lock().await;
+    table
+      .get_earliest_version()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))
+  }
+
+  #[napi(catch_unwind)]
+  pub fn get_num_index_cols(&self) -> Result<i32> {
+    self.with_table(|t| {
+      Ok(
+        t.snapshot()
+          .map_err(|err| napi::Error::from_reason(err.to_string()))?
+          .table_config()
+          .num_indexed_cols(),
+      )
+    })
+  }
+
+  #[napi(catch_unwind)]
+  pub fn get_stats_columns(&self) -> Result<Option<Vec<String>>> {
+    self.with_table(|t| {
+      Ok(
+        t.snapshot()
+          .map_err(|err| napi::Error::from_reason(err.to_string()))?
+          .table_config()
+          .stats_columns()
+          .map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>()),
+      )
+    })
+  }
+
+  #[napi(catch_unwind)]
+  pub fn has_files(&self) -> Result<bool> {
+    self.with_table(|t| Ok(t.config.require_files))
+  }
+
+  #[napi(catch_unwind)]
+  pub fn metadata(&self) -> Result<JsDeltaTableMetadata> {
+    let metadata = self.with_table(|t| {
+      t.metadata()
+        .cloned()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))
+    })?;
+
+    Ok(JsDeltaTableMetadata {
+      id: metadata.id.clone(),
+      name: metadata.name.clone(),
+      description: metadata.description.clone(),
+      partition_columns: metadata.partition_columns.clone(),
+      created_time: metadata.created_time,
+      configuration: metadata.configuration.clone(),
+    })
+  }
+
+  #[napi(catch_unwind)]
+  pub fn protocol_versions(&self) -> Result<JsDeltaTableProtocolVersions> {
+    let table_protocol = self.with_table(|t| {
+      t.protocol()
+        .cloned()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))
+    })?;
+
+    let reader_features = table_protocol
+      .reader_features
+      .as_ref()
+      .and_then(|features| {
+        let empty_set = !features.is_empty();
+        empty_set.then(|| {
+          features
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+        })
+      });
+
+    let writer_features = table_protocol
+      .writer_features
+      .as_ref()
+      .and_then(|features| {
+        let empty_set = !features.is_empty();
+        empty_set.then(|| {
+          features
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+        })
+      });
+
+    Ok(JsDeltaTableProtocolVersions {
+      min_reader_version: table_protocol.min_reader_version,
+      min_writer_version: table_protocol.min_writer_version,
+      reader_features,
+      writer_features,
+    })
   }
 
   #[napi(catch_unwind)]
   /// Get the current schema of the Delta table.
   pub fn schema(&self) -> Result<String> {
-    let table = get_runtime().block_on(self.table.lock());
-    let schema = table.schema();
+    let schema = self.with_table(|t| {
+      t.get_schema()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))
+        .map(|s| s.to_owned())
+    })?;
 
-    match schema {
-      Some(schema) => {
-        serde_json::to_string(schema).map_err(|err| napi::Error::from_reason(err.to_string()))
-      }
-      None => Err(napi::Error::from_reason(
-        "Cannot read table schema. Table is not loaded",
-      )),
-    }
+    // TODO: could return a JS object instead
+    serde_json::to_string(&schema).map_err(|err| napi::Error::from_reason(err.to_string()))
   }
 }
 
