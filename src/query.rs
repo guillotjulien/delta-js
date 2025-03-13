@@ -1,8 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use deltalake::{
   arrow::{
-    array::RecordBatch,
     json::{
       self,
       writer::{JsonArray, LineDelimited},
