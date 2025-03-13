@@ -1,12 +1,14 @@
 #[macro_use]
 extern crate napi_derive;
 
+use deltalake::init_client_version;
 use napi::*;
 use std::sync::Once;
 use tokio::runtime::Runtime;
 
 mod query;
 mod table;
+mod transaction;
 
 #[module_exports]
 /// This function is executed when importing the module in JS
@@ -19,6 +21,8 @@ fn init(_: JsObject) -> Result<()> {
   // deltalake::gcp::register_handlers(None);
   // deltalake::hdfs::register_handlers(None);
   // deltalake_mount::register_handlers(None);
+
+  init_client_version(format!("js-{}", env!("CARGO_PKG_VERSION")).as_str());
 
   Ok(())
 }

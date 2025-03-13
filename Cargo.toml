@@ -16,7 +16,7 @@ napi = { version = "3.0.0-alpha.25", default-features = false, features = [
     "web_stream",
 ] }
 napi-derive = "3.0.0-alpha.23"
-deltalake = { version = "0.25.0", features = ["s3", "datafusion"] }
+deltalake = { version = "0.25.0", features = ["s3", "datafusion", "lakefs"] }
 futures = "0.3"
 tokio = { version = "1.33.0" }
 tokio-stream = "0.1"

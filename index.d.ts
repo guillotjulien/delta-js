@@ -41,6 +41,15 @@ export interface DeltaTableProtocolVersions {
   readerFeatures?: Array<string>
   writerFeatures?: Array<string>
 }
+export interface CommitProperties {
+  customMetadata?: Record<string, string>
+  maxCommitRetries?: number
+  appTransactions?: Array<Transaction>
+}
+export interface PostCommitHookProperties {
+  createCheckpoint: boolean
+  cleanupExpiredLogs?: boolean
+}
 export class QueryBuilder {
   constructor()
   /**
@@ -108,4 +117,13 @@ export class DeltaTable {
   protocolVersions(): DeltaTableProtocolVersions
   /** Get the current schema of the Delta table. */
   schema(): string
+  /** Run the Vacuum command on the Delta Table: list and delete files no longer referenced by the Delta table and are older than the retention threshold. */
+  vacuum(dryRun: boolean, enforceRetentionDuration: boolean, commitProperties?: JsCommitProperties | undefined | null, postCommithookProperties?: JsPostCommitHookProperties | undefined | null): Promise<Array<string>>
+}
+export type JsTransaction = Transaction
+export class Transaction {
+  appId: string
+  version: number
+  lastUpdated?: number
+  constructor(appId: string, version: number, lastUpdated?: number | undefined | null)
 }

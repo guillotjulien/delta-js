@@ -1661,6 +1661,7 @@ checksum = "78889f4005974b848f130fa5dedae81987f1bc93b107291ea87d900c93b6c3bb"
 dependencies = [
  "deltalake-aws",
  "deltalake-core",
+ "deltalake-lakefs",
 ]
 
 [[package]]
@@ -1753,6 +1754,32 @@ dependencies = [
  "urlencoding",
  "uuid",
  "z85",
+]
+
+[[package]]
+name = "deltalake-lakefs"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f4482325b644008c4bfe2c1f439475dee05593d2b3dcc602b2b4d4d5454f3d1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "dashmap",
+ "delta_kernel",
+ "deltalake-core",
+ "futures",
+ "http 1.2.0",
+ "object_store",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.10",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]

@@ -1,12 +1,19 @@
 use std::collections::HashMap;
+use std::future::IntoFuture;
 use std::sync::Arc;
+use std::time::Duration;
 
+use deltalake::lakefs::LakeFSCustomExecuteHandler;
+use deltalake::operations::vacuum::VacuumBuilder;
 use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
 use deltalake::{DeltaTable, DeltaTableBuilder};
 use napi::{Either, Result};
 use tokio::sync::Mutex;
 
 use crate::get_runtime;
+use crate::transaction::{
+  maybe_create_commit_properties, JsCommitProperties, JsPostCommitHookProperties,
+};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -66,6 +73,12 @@ pub struct JsDeltaTable {
 
 /// Those methods are internal and shouldn't be exposed to the JS API
 impl JsDeltaTable {
+  /// Internal helper method which allows for acquiring the lock on the underlying
+  /// [deltalake::DeltaTable] and then executing the given function parameter with the guarded
+  /// reference
+  ///
+  /// This should only be used for read-only accesses and callers that need to modify the
+  /// underlying instance should acquire the lock themselves.
   pub fn with_table<T>(&self, func: impl Fn(&DeltaTable) -> Result<T>) -> Result<T> {
     let table = get_runtime().block_on(self.table.lock());
     func(&table)
@@ -303,6 +316,52 @@ impl JsDeltaTable {
 
     // TODO: could return a JS object instead
     serde_json::to_string(&schema).map_err(|err| napi::Error::from_reason(err.to_string()))
+  }
+
+  /// Run the Vacuum command on the Delta Table: list and delete files no longer referenced by the Delta table and are older than the retention threshold.
+  #[napi(catch_unwind)]
+  pub async fn vacuum(
+    &self,
+    dry_run: bool,
+    // retention_hours: Option<u64>,
+    enforce_retention_duration: bool,
+    commit_properties: Option<JsCommitProperties>,
+    post_commithook_properties: Option<JsPostCommitHookProperties>,
+  ) -> Result<Vec<String>> {
+    let mut table = self.table.lock().await;
+    let log_store = table.log_store();
+    let snapshot = table
+      .snapshot()
+      .cloned()
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    let mut cmd = VacuumBuilder::new(log_store.clone(), snapshot)
+      .with_enforce_retention_duration(enforce_retention_duration)
+      .with_dry_run(dry_run);
+
+    // FIXME: need chrono...
+    // if let Some(retention_period) = retention_hours {
+    //   cmd = cmd.with_retention_period(Duration::hours(retention_period as i64));
+    // }
+
+    if let Some(commit_properties) =
+      maybe_create_commit_properties(commit_properties, post_commithook_properties)
+    {
+      cmd = cmd.with_commit_properties(commit_properties);
+    }
+
+    if log_store.clone().name() == "LakeFSLogStore" {
+      cmd = cmd.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
+    }
+
+    let (updated_table, metrics) = cmd
+      .into_future()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    table.state = updated_table.state;
+
+    Ok(metrics.files_deleted)
   }
 }
 
