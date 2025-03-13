@@ -1,20 +1,20 @@
 import { Readable } from "stream";
-import { DeltaTable, QueryBuilder } from '../index.js';
+import { DeltaTable, QueryBuilder } from "../index.js";
 
-const table = new DeltaTable('./test/resources/covid-19');
+const table = new DeltaTable("./test/resources/covid-19");
 
 await table.load();
 
 const qb = new QueryBuilder();
 
-qb.register('test', table);
+qb.register("test", table);
 
-const stream = Readable.fromWeb(qb.sql('select * from test').stream());
+const stream = Readable.fromWeb(qb.sql("select * from test").stream());
 
-stream.on('data', (chunk) => {
-  console.log('chunk:', chunk.toString());
+stream.on("data", (chunk) => {
+  console.log("chunk:", chunk.toString());
 });
 
-stream.on('end', () => {
-  console.log('stream ended');
+stream.on("end", () => {
+  console.log("stream ended");
 });

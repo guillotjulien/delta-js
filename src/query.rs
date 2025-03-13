@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex};
 use deltalake::{
   arrow::{
     array::RecordBatch,
-    json::{self, writer::{JsonArray, LineDelimited}},
+    json::{
+      self,
+      writer::{JsonArray, LineDelimited},
+    },
     util::pretty::print_batches,
   },
   datafusion::prelude::SessionContext,
@@ -14,11 +17,10 @@ use napi::{
   bindgen_prelude::{Buffer, BufferSlice, ReadableStream},
   Env, Result,
 };
-use serde_json::json;
-use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::error::SendError;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::{get_runtime, table::DeltaTable};
+use crate::{get_runtime, table::JsDeltaTable};
 
 #[napi]
 #[derive(Clone)]
@@ -47,15 +49,9 @@ impl QueryBuilder {
   ///
   /// Once called, the provided `delta_table` will be referenceable in SQL queries so long as
   /// another table of the same name is not registered over it.
-  pub fn register(&self, table_name: String, delta_table: &DeltaTable) -> Result<QueryBuilder> {
-    let raw_table = delta_table.raw_table();
-    let table = get_runtime().block_on(raw_table.lock());
-
-    let snapshot = table
-      .snapshot()
-      .cloned()
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
-    let log_store = table.log_store().clone();
+  pub fn register(&self, table_name: String, delta_table: &JsDeltaTable) -> Result<QueryBuilder> {
+    let snapshot = delta_table.clone_state()?;
+    let log_store = delta_table.log_store()?;
 
     let scan_config = DeltaScanConfigBuilder::default()
       .build(&snapshot)
@@ -119,61 +115,117 @@ impl QueryResult {
   }
 
   #[napi(catch_unwind)]
+  /// Execute the given SQL command within the [SessionContext] of this instance
+  ///
+  /// **NOTE:** The function returns the rows as a continuous, newline delimited, stream of JSON strings
+  /// it is especially suited to deal with large results set.
   pub fn stream(&self, env: Env) -> Result<ReadableStream<BufferSlice>> {
-    let df = get_runtime()
-      .block_on(self.query_builder.ctx.sql(self.sql_query.as_str()))
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
-
     let stream = get_runtime()
-      .block_on(df.execute_stream())
+      .block_on(async {
+        let df = self.query_builder.ctx.sql(self.sql_query.as_str()).await?;
+        df.execute_stream().await
+      })
       .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    let stream = Arc::new(Mutex::new(stream));
-
+    // FIXME: Make number of batches before blocking configurable
     let (tx, rx) = tokio::sync::mpsc::channel(100);
+
+    // Spawn a dedicated thread for processing the stream
     std::thread::spawn(move || {
-      let mut stream_lock = stream.lock().unwrap();
+      // Use a local runtime for this thread
+      let local_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-      while let Some(batch_result) = get_runtime().block_on(stream_lock.try_next()).transpose() {
-        match batch_result {
-          Ok(batch) => {
-            let mut json_writer = json::Writer::<Vec<u8>, LineDelimited>::new(Vec::new());
-            json_writer.write(&batch).unwrap();
+      // Process the stream in this thread
+      local_runtime.block_on(async {
+        let mut stream = stream;
 
-            let json_bytes = json_writer.into_inner();
-            if let Err(TrySendError::Closed(_)) = tx.try_send(Ok(json_bytes)) {
-              // No more batches
+        while let Some(batch_result) = stream.try_next().await.transpose() {
+          match batch_result {
+            Ok(batch) => {
+              // Process the batch in a separate task to avoid blocking
+              let batch_tx = tx.clone();
+
+              // Use spawn_blocking for CPU-intensive JSON serialization
+              if let Err(err) = tokio::task::spawn_blocking(move || {
+                let mut json_writer = json::Writer::<Vec<u8>, LineDelimited>::new(Vec::new());
+                if let Err(e) = json_writer.write(&batch) {
+                  return Err(napi::Error::from_reason(e.to_string()));
+                }
+
+                let json_bytes = json_writer.into_inner();
+                if let Err(SendError(_)) = batch_tx.blocking_send(Ok(json_bytes)) {
+                  // Channel closed, stream was likely aborted
+                  return Err(napi::Error::from_reason("Stream aborted"));
+                }
+
+                Ok(())
+              })
+              .await
+              .map_err(|err| napi::Error::from_reason(format!("Task panicked: {}", err)))
+              {
+                let _ = tx.send(Err(err)).await;
+                break;
+              }
+            }
+            Err(err) => {
+              let _ = tx
+                .send(Err(napi::Error::from_reason(err.to_string())))
+                .await;
               break;
             }
           }
-          Err(err) => {
-            // Handle errors during streaming
-            tx.try_send(Err(napi::Error::from_reason(err.to_string())))
-              .ok();
-            break;
-          }
         }
-      }
 
-      // Close the sender to signal the end of the stream
-      drop(tx);
+        // Close the sender to signal the end of the stream
+        drop(tx);
+      });
     });
 
     ReadableStream::create_with_stream_bytes(&env, ReceiverStream::new(rx))
   }
 
   #[napi(catch_unwind)]
+  /// Execute the given SQL command within the [SessionContext] of this instance
+  ///
+  /// **NOTE:** Since this function returns a materialized JS Buffer,
+  /// it may result unexpected memory consumption for queries which return large data
+  /// sets.
   pub async fn fetch_all(&self) -> Result<Buffer> {
-    let df = self.query_builder.ctx.sql(self.sql_query.as_str()).await.map_err(|err| napi::Error::from_reason(err.to_string()))?;
-    let batches = df.collect().await.map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let df = self
+      .query_builder
+      .ctx
+      .sql(self.sql_query.as_str())
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    let mut json_writer = json::Writer::<Vec<u8>, JsonArray>::new(Vec::new());
-    for batch in batches {
-      json_writer.write(&batch).map_err(|err| napi::Error::from_reason(err.to_string()))?;
-    }
-    json_writer.finish().map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let batches = df
+      .collect()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    let json_bytes = json_writer.into_inner();
+    // Move the JSON serialization to a separate thread
+    // This prevents blocking the event loop with CPU-intensive work
+    let json_bytes = tokio::task::spawn_blocking(move || {
+      let mut json_writer = json::Writer::<Vec<u8>, JsonArray>::new(Vec::new());
+
+      for batch in batches {
+        json_writer
+          .write(&batch)
+          .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      }
+
+      json_writer
+        .finish()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+      Ok::<_, napi::Error>(json_writer.into_inner())
+    })
+    .await
+    .map_err(|err| napi::Error::from_reason(format!("Join error: {}", err)))?
+    .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
     Ok(json_bytes.into())
   }

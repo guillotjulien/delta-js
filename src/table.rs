@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
+use deltalake::{DeltaTable, DeltaTableBuilder};
 use napi::{Either, Result};
 use tokio::sync::Mutex;
 
@@ -39,13 +41,13 @@ pub struct AWSConfigKeyProfile {
   pub aws_profile: String,
 }
 
-#[napi]
-pub struct DeltaTable {
-  table: Arc<Mutex<deltalake::DeltaTable>>,
+#[napi(js_name = "DeltaTable")]
+pub struct JsDeltaTable {
+  table: Arc<Mutex<DeltaTable>>,
 }
 
 #[napi]
-impl DeltaTable {
+impl JsDeltaTable {
   #[napi(constructor)]
   /// Create the Delta table from a path with an optional version.
   /// Multiple StorageBackends are currently supported: AWS S3 and local URI.
@@ -66,7 +68,7 @@ impl DeltaTable {
     // deltalake::hdfs::register_handlers(None);
     // deltalake_mount::register_handlers(None);
 
-    let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
+    let mut builder = DeltaTableBuilder::from_uri(table_uri.clone());
 
     if let Some(options) = options.clone() {
       if let Some(version) = options.version {
@@ -100,14 +102,17 @@ impl DeltaTable {
         .map_err(|err| napi::Error::from_reason(err.to_string()))?,
     ));
 
-    Ok(DeltaTable { table })
+    Ok(JsDeltaTable { table })
   }
-  
+
   /// Currently it'll fail if the first entry in your _delta_log is a CRC file.
   /// See https://github.com/delta-io/delta-rs/issues/3115
   /// Fix here: https://github.com/delta-io/delta-rs/pull/3122
   #[napi(catch_unwind)]
-  pub async fn is_delta_table(table_uri: String, storage_options: Option<Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>>) -> Result<bool> {
+  pub async fn is_delta_table(
+    table_uri: String,
+    storage_options: Option<Either<AWSConfigKeyCredentials, AWSConfigKeyProfile>>,
+  ) -> Result<bool> {
     // https://github.com/delta-io/delta-rs/blob/0b90a11383dce614be369032062e3e8e78cf95d9/python/src/lib.rs#L2197
     deltalake::aws::register_handlers(None);
     // deltalake::azure::register_handlers(None);
@@ -115,14 +120,17 @@ impl DeltaTable {
     // deltalake::hdfs::register_handlers(None);
     // deltalake_mount::register_handlers(None);
 
-    let mut builder = deltalake::DeltaTableBuilder::from_uri(table_uri.clone());
+    let mut builder = DeltaTableBuilder::from_uri(table_uri.clone());
     if let Some(storage_options) = storage_options {
       let options = get_storage_options(storage_options);
       builder = builder.with_storage_options(options);
     }
 
-    let table = builder.build().map_err(|err| napi::Error::from_reason(err.to_string()))?;
-    let is_delta_table = table.verify_deltatable_existence()
+    let table = builder
+      .build()
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let is_delta_table = table
+      .verify_deltatable_existence()
       .await
       .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
@@ -166,8 +174,21 @@ impl DeltaTable {
     }
   }
 
-  pub fn raw_table(&self) -> Arc<Mutex<deltalake::DeltaTable>> {
-    self.table.clone()
+  fn with_table<T>(&self, func: impl Fn(&DeltaTable) -> Result<T>) -> Result<T> {
+    let table = get_runtime().block_on(self.table.lock());
+    func(&table)
+  }
+
+  pub fn clone_state(&self) -> Result<DeltaTableState> {
+    self.with_table(|t| {
+      t.snapshot()
+        .cloned()
+        .map_err(|err| napi::Error::from_reason(err.to_string()))
+    })
+  }
+
+  pub fn log_store(&self) -> Result<LogStoreRef> {
+    self.with_table(|t| Ok(t.log_store().clone()))
   }
 }
 

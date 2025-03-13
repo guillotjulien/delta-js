@@ -35,7 +35,7 @@ export class QueryBuilder {
    * Once called, the provided `delta_table` will be referenceable in SQL queries so long as
    * another table of the same name is not registered over it.
    */
-  register(tableName: string, deltaTable: DeltaTable): QueryBuilder
+  register(tableName: string, deltaTable: JsDeltaTable): QueryBuilder
   /** Prepares the sql query to be executed. */
   sql(sqlQuery: string): QueryResult
 }
@@ -46,6 +46,7 @@ export class QueryResult {
   stream(): ReadableStream<Buffer>
   fetchAll(): Promise<Buffer>
 }
+export type JsDeltaTable = DeltaTable
 export class DeltaTable {
   /**
    * Create the Delta table from a path with an optional version.
