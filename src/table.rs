@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::future::IntoFuture;
 use std::sync::Arc;
-use std::time::Duration;
 
+use chrono::Duration;
 use deltalake::lakefs::LakeFSCustomExecuteHandler;
 use deltalake::operations::vacuum::VacuumBuilder;
 use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
@@ -64,6 +64,28 @@ pub struct JsDeltaTableProtocolVersions {
   pub min_writer_version: i32,
   pub reader_features: Option<Vec<String>>,
   pub writer_features: Option<Vec<String>>,
+}
+
+#[napi(object)]
+pub struct DeltaTableVacuumOptions {
+  /// When true, list only the files, delete otherwise.
+  /// This defaults to `false`.
+  pub dry_run: Option<bool>,
+
+  /// When falsed, accepts retention hours smaller than the value from
+  /// `delta.deletedFileRetentionDuration`.
+  /// This defaults to `true`.
+  pub enforce_retention_duration: Option<bool>,
+
+  /// the retention threshold in hours, if none then the value from
+  /// `delta.deletedFileRetentionDuration` is used or default of 1 week otherwise.
+  pub retention_hours: Option<i64>,
+
+  /// Properties of the transaction commit. If null, default values are used.
+  pub commit_properties: Option<JsCommitProperties>,
+
+  /// Properties for the post commit hook. If null, default values are used.
+  pub post_commithook_properties: Option<JsPostCommitHookProperties>,
 }
 
 #[napi(js_name = "DeltaTable")]
@@ -318,16 +340,10 @@ impl JsDeltaTable {
     serde_json::to_string(&schema).map_err(|err| napi::Error::from_reason(err.to_string()))
   }
 
-  /// Run the Vacuum command on the Delta Table: list and delete files no longer referenced by the Delta table and are older than the retention threshold.
+  /// Run the Vacuum command on the Delta Table: list and delete files no longer
+  /// referenced by the Delta table and are older than the retention threshold.
   #[napi(catch_unwind)]
-  pub async fn vacuum(
-    &self,
-    dry_run: bool,
-    // retention_hours: Option<u64>,
-    enforce_retention_duration: bool,
-    commit_properties: Option<JsCommitProperties>,
-    post_commithook_properties: Option<JsPostCommitHookProperties>,
-  ) -> Result<Vec<String>> {
+  pub async fn vacuum(&self, options: Option<DeltaTableVacuumOptions>) -> Result<Vec<String>> {
     let mut table = self.table.lock().await;
     let log_store = table.log_store();
     let snapshot = table
@@ -335,19 +351,30 @@ impl JsDeltaTable {
       .cloned()
       .map_err(|err| napi::Error::from_reason(err.to_string()))?;
 
-    let mut cmd = VacuumBuilder::new(log_store.clone(), snapshot)
-      .with_enforce_retention_duration(enforce_retention_duration)
-      .with_dry_run(dry_run);
+    let mut cmd = VacuumBuilder::new(log_store.clone(), snapshot);
+    if let Some(options) = options {
+      if let Some(dry_run) = options.dry_run {
+        cmd = cmd.with_dry_run(dry_run);
+      }
 
-    // FIXME: need chrono...
-    // if let Some(retention_period) = retention_hours {
-    //   cmd = cmd.with_retention_period(Duration::hours(retention_period as i64));
-    // }
+      if let Some(enforce_retention_duration) = options.enforce_retention_duration {
+        cmd = cmd.with_enforce_retention_duration(enforce_retention_duration);
+      }
 
-    if let Some(commit_properties) =
-      maybe_create_commit_properties(commit_properties, post_commithook_properties)
-    {
-      cmd = cmd.with_commit_properties(commit_properties);
+      if let Some(retention_period) = options.retention_hours {
+        assert_napi!(
+          retention_period >= 0,
+          "retention hours should be null or greater or equal to 0"
+        );
+        cmd = cmd.with_retention_period(Duration::hours(retention_period));
+      }
+
+      if let Some(commit_properties) = maybe_create_commit_properties(
+        options.commit_properties,
+        options.post_commithook_properties,
+      ) {
+        cmd = cmd.with_commit_properties(commit_properties);
+      }
     }
 
     if log_store.clone().name() == "LakeFSLogStore" {

@@ -6,9 +6,16 @@ use napi::*;
 use std::sync::Once;
 use tokio::runtime::Runtime;
 
-mod query;
-mod table;
+// Order of crate import matters for Typescript type definition generation!
+#[rustfmt::skip]
+#[macro_use]
+mod utils;
+#[rustfmt::skip]
 mod transaction;
+#[rustfmt::skip]
+mod query;
+#[rustfmt::skip]
+mod table;
 
 #[module_exports]
 /// This function is executed when importing the module in JS
