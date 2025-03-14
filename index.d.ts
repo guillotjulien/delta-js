@@ -151,4 +151,5 @@ export class DeltaTable {
    * referenced by the Delta table and are older than the retention threshold.
    */
   vacuum(options?: DeltaTableVacuumOptions | undefined | null): Promise<Array<string>>
+  write(data: Uint8Array, mode: string, schemaMode?: string | undefined | null, partitionBy?: Array<string> | undefined | null): Promise<void>
 }

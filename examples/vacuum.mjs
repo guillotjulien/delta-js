@@ -1,4 +1,4 @@
-import { DeltaTable, QueryBuilder } from "../index.js";
+import { DeltaTable } from "../index.js";
 
 const table = new DeltaTable("./tests/resources/test-table");
 

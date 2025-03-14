@@ -15,6 +15,8 @@ mod transaction;
 #[rustfmt::skip]
 mod query;
 #[rustfmt::skip]
+mod writer;
+#[rustfmt::skip]
 mod table;
 
 #[module_exports]

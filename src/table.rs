@@ -1,12 +1,18 @@
 use std::collections::HashMap;
 use std::future::IntoFuture;
+use std::io::Cursor;
 use std::sync::Arc;
 
 use chrono::Duration;
+use deltalake::arrow::ipc::reader::StreamReader;
+use deltalake::datafusion::datasource::provider_as_source;
+use deltalake::datafusion::logical_expr::LogicalPlanBuilder;
 use deltalake::lakefs::LakeFSCustomExecuteHandler;
 use deltalake::operations::vacuum::VacuumBuilder;
+use deltalake::operations::write::WriteBuilder;
 use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
-use deltalake::{DeltaTable, DeltaTableBuilder};
+use deltalake::{DeltaTable, DeltaTableBuilder, DeltaTableError};
+use napi::bindgen_prelude::Uint8Array;
 use napi::{Either, Result};
 use tokio::sync::Mutex;
 
@@ -14,6 +20,7 @@ use crate::get_runtime;
 use crate::transaction::{
   maybe_create_commit_properties, JsCommitProperties, JsPostCommitHookProperties,
 };
+use crate::writer::to_lazy_table;
 
 #[napi(object)]
 #[derive(Clone)]
@@ -389,6 +396,72 @@ impl JsDeltaTable {
     table.state = updated_table.state;
 
     Ok(metrics.files_deleted)
+  }
+
+  #[napi]
+  pub async fn write(
+    &self,
+    data: Uint8Array,
+    mode: String,
+    // FIXME: starting from here it's all options
+    schema_mode: Option<String>,
+    partition_by: Option<Vec<String>>,
+  ) -> Result<()> {
+    let mut table = self.table.lock().await;
+    let log_store = table.log_store();
+
+    let mut builder = WriteBuilder::new(
+      log_store.clone(),
+      table.state.clone(),
+      // Take the Option<state> since it might be the first write,
+      // triggered through `write_to_deltalake`
+    )
+    .with_save_mode(
+      mode
+        .parse()
+        .map_err(|e: DeltaTableError| napi::Error::from_reason(e.to_string()))?,
+    );
+
+    let cursor = Cursor::new(data.to_vec());
+    let reader =
+      StreamReader::try_new(cursor, None).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    let table_provider =
+      to_lazy_table(reader).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    let plan = LogicalPlanBuilder::scan("source", provider_as_source(table_provider), None)
+      .map_err(|e| napi::Error::from_reason(e.to_string()))?
+      .build()
+      .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    builder = builder.with_input_execution_plan(Arc::new(plan));
+
+    if let Some(schema_mode) = schema_mode {
+      builder = builder.with_schema_mode(
+        schema_mode
+          .parse()
+          .map_err(|e: DeltaTableError| napi::Error::from_reason(e.to_string()))?,
+      );
+    }
+
+    if let Some(partition_columns) = partition_by {
+      builder = builder.with_partition_columns(partition_columns);
+    }
+
+    // TODO: Support other options
+
+    if log_store.clone().name() == "LakeFSLogStore" {
+      builder = builder.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
+    }
+
+    let updated_table = builder
+      .into_future()
+      .await
+      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+
+    table.state = updated_table.state;
+
+    Ok(())
   }
 }
 
