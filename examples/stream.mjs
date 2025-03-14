@@ -1,7 +1,7 @@
 import { Readable } from "stream";
 import { DeltaTable, QueryBuilder } from "../index.js";
 
-const table = new DeltaTable("./test/resources/covid-19");
+const table = new DeltaTable("./tests/resources/covid-19");
 
 await table.load();
 

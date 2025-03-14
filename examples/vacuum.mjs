@@ -1,6 +1,6 @@
 import { DeltaTable, QueryBuilder } from "../index.js";
 
-const table = new DeltaTable("./test/resources/test-table");
+const table = new DeltaTable("./tests/resources/test-table");
 
 await table.load();
 
