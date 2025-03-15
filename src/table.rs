@@ -10,8 +10,11 @@ use deltalake::datafusion::logical_expr::LogicalPlanBuilder;
 use deltalake::lakefs::LakeFSCustomExecuteHandler;
 use deltalake::operations::vacuum::VacuumBuilder;
 use deltalake::operations::write::WriteBuilder;
+use deltalake::parquet::basic::Compression;
+use deltalake::parquet::errors::ParquetError;
+use deltalake::parquet::file::properties::{EnabledStatistics, WriterProperties};
 use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
-use deltalake::{DeltaTable, DeltaTableBuilder};
+use deltalake::{DeltaResult, DeltaTable, DeltaTableBuilder, DeltaTableError};
 use napi::bindgen_prelude::Uint8Array;
 use napi::{Either, Result};
 use tokio::sync::Mutex;
@@ -94,6 +97,47 @@ pub struct DeltaTableVacuumOptions {
 
   /// Properties for the post commit hook. If null, default values are used.
   pub post_commithook_properties: Option<JsPostCommitHookProperties>,
+}
+
+#[napi(object)]
+pub struct DeltaTableWriteOptions {
+  pub schema_mode: Option<String>,
+  pub partition_by: Option<Vec<String>>,
+  pub predicate: Option<String>,
+  pub target_file_size: Option<u8>,
+  pub name: Option<String>,
+  pub description: Option<String>,
+  pub configuration: Option<HashMap<String, Option<String>>>,
+  pub writer_properties: Option<JsWriterProperties>,
+  pub commit_properties: Option<JsCommitProperties>,
+  pub post_commithook_properties: Option<JsPostCommitHookProperties>,
+}
+
+#[napi(object, js_name = "WriterProperties")]
+pub struct JsWriterProperties {
+  pub data_page_size_limit: Option<u8>,
+  pub dictionary_page_size_limit: Option<u8>,
+  pub data_page_row_count_limit: Option<u8>,
+  pub write_batch_size: Option<u8>,
+  pub max_row_group_size: Option<u8>,
+  pub statistics_truncate_length: Option<u8>,
+  pub compression: Option<String>,
+  pub default_column_properties: Option<ColumnProperties>,
+  pub column_properties: Option<HashMap<String, Option<ColumnProperties>>>,
+}
+
+#[napi(object)]
+pub struct ColumnProperties {
+  pub dictionary_enabled: Option<bool>,
+  pub statistics_enabled: Option<String>,
+  pub bloom_filter_properties: Option<BloomFilterProperties>,
+}
+
+#[napi(object)]
+pub struct BloomFilterProperties {
+  pub set_bloom_filter_enabled: Option<bool>,
+  pub fpp: Option<f64>,
+  pub ndv: Option<i64>,
 }
 
 #[napi(js_name = "DeltaTable")]
@@ -269,7 +313,7 @@ impl JsDeltaTable {
   }
 
   #[napi(catch_unwind)]
-  pub fn protocol_versions(&self) -> Result<JsDeltaTableProtocolVersions> {
+  pub fn protocol(&self) -> Result<JsDeltaTableProtocolVersions> {
     let table_protocol = self.with_table(|t| Ok(t.protocol().cloned().map_err(JsError::from)?))?;
 
     let reader_features = table_protocol
@@ -371,9 +415,7 @@ impl JsDeltaTable {
     &self,
     data: Uint8Array,
     mode: String,
-    // FIXME: starting from here it's all options
-    schema_mode: Option<String>,
-    partition_by: Option<Vec<String>>,
+    options: Option<DeltaTableWriteOptions>,
   ) -> Result<()> {
     let mut table = self.table.lock().await;
     let log_store = table.log_store();
@@ -398,15 +440,47 @@ impl JsDeltaTable {
 
     builder = builder.with_input_execution_plan(Arc::new(plan));
 
-    if let Some(schema_mode) = schema_mode {
-      builder = builder.with_schema_mode(schema_mode.parse().map_err(JsError::from)?);
-    }
+    if let Some(options) = options {
+      if let Some(schema_mode) = options.schema_mode {
+        builder = builder.with_schema_mode(schema_mode.parse().map_err(JsError::from)?);
+      }
 
-    if let Some(partition_columns) = partition_by {
-      builder = builder.with_partition_columns(partition_columns);
-    }
+      if let Some(partition_columns) = options.partition_by {
+        builder = builder.with_partition_columns(partition_columns);
+      }
 
-    // TODO: Support other options
+      if let Some(writer_props) = options.writer_properties {
+        builder = builder
+          .with_writer_properties(set_writer_properties(writer_props).map_err(JsError::from)?);
+      }
+
+      if let Some(name) = &options.name {
+        builder = builder.with_table_name(name);
+      };
+
+      if let Some(description) = &options.description {
+        builder = builder.with_description(description);
+      };
+
+      if let Some(predicate) = options.predicate {
+        builder = builder.with_replace_where(predicate);
+      };
+
+      if let Some(target_file_size) = options.target_file_size {
+        builder = builder.with_target_file_size(target_file_size as usize);
+      };
+
+      if let Some(config) = options.configuration {
+        builder = builder.with_configuration(config);
+      };
+
+      if let Some(commit_properties) = maybe_create_commit_properties(
+        options.commit_properties,
+        options.post_commithook_properties,
+      ) {
+        builder = builder.with_commit_properties(commit_properties);
+      };
+    }
 
     if log_store.clone().name() == "LakeFSLogStore" {
       builder = builder.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
@@ -448,4 +522,110 @@ fn get_storage_options(
   }
 
   options
+}
+
+fn set_writer_properties(writer_properties: JsWriterProperties) -> DeltaResult<WriterProperties> {
+  let mut properties = WriterProperties::builder();
+
+  if let Some(data_page_size) = writer_properties.data_page_size_limit {
+    properties = properties.set_data_page_size_limit(data_page_size as usize);
+  }
+
+  if let Some(dictionary_page_size) = writer_properties.dictionary_page_size_limit {
+    properties = properties.set_dictionary_page_size_limit(dictionary_page_size as usize);
+  }
+
+  if let Some(data_page_row_count) = writer_properties.data_page_row_count_limit {
+    properties = properties.set_data_page_row_count_limit(data_page_row_count as usize);
+  }
+
+  if let Some(batch_size) = writer_properties.write_batch_size {
+    properties = properties.set_write_batch_size(batch_size as usize);
+  }
+
+  if let Some(row_group_size) = writer_properties.max_row_group_size {
+    properties = properties.set_max_row_group_size(row_group_size as usize);
+  }
+
+  if let Some(statistics_truncate_length) = writer_properties.statistics_truncate_length {
+    properties =
+      properties.set_statistics_truncate_length(Some(statistics_truncate_length as usize));
+  }
+
+  if let Some(compression) = writer_properties.compression {
+    let compress: Compression = compression
+      .parse()
+      .map_err(|err: ParquetError| DeltaTableError::Generic(err.to_string()))?;
+
+    properties = properties.set_compression(compress);
+  }
+
+  if let Some(default_column_properties) = writer_properties.default_column_properties {
+    if let Some(dictionary_enabled) = default_column_properties.dictionary_enabled {
+      properties = properties.set_dictionary_enabled(dictionary_enabled);
+    }
+
+    if let Some(statistics_enabled) = default_column_properties.statistics_enabled {
+      let enabled_statistics: EnabledStatistics = statistics_enabled
+        .parse()
+        .map_err(|err: String| DeltaTableError::Generic(err))?;
+
+      properties = properties.set_statistics_enabled(enabled_statistics);
+    }
+
+    if let Some(bloom_filter_properties) = default_column_properties.bloom_filter_properties {
+      if let Some(set_bloom_filter_enabled) = bloom_filter_properties.set_bloom_filter_enabled {
+        properties = properties.set_bloom_filter_enabled(set_bloom_filter_enabled);
+      }
+
+      if let Some(bloom_filter_fpp) = bloom_filter_properties.fpp {
+        properties = properties.set_bloom_filter_fpp(bloom_filter_fpp);
+      }
+
+      if let Some(bloom_filter_ndv) = bloom_filter_properties.ndv {
+        properties = properties.set_bloom_filter_ndv(bloom_filter_ndv as u64);
+      }
+    }
+  }
+
+  if let Some(column_properties) = writer_properties.column_properties {
+    for (column_name, column_prop) in column_properties {
+      if let Some(column_prop) = column_prop {
+        if let Some(dictionary_enabled) = column_prop.dictionary_enabled {
+          properties = properties
+            .set_column_dictionary_enabled(column_name.clone().into(), dictionary_enabled);
+        }
+
+        if let Some(statistics_enabled) = column_prop.statistics_enabled {
+          let enabled_statistics: EnabledStatistics = statistics_enabled
+            .parse()
+            .map_err(|err: String| DeltaTableError::Generic(err))?;
+
+          properties = properties
+            .set_column_statistics_enabled(column_name.clone().into(), enabled_statistics);
+        }
+
+        if let Some(bloom_filter_properties) = column_prop.bloom_filter_properties {
+          if let Some(set_bloom_filter_enabled) = bloom_filter_properties.set_bloom_filter_enabled {
+            properties = properties.set_column_bloom_filter_enabled(
+              column_name.clone().into(),
+              set_bloom_filter_enabled,
+            );
+          }
+
+          if let Some(bloom_filter_fpp) = bloom_filter_properties.fpp {
+            properties =
+              properties.set_column_bloom_filter_fpp(column_name.clone().into(), bloom_filter_fpp);
+          }
+
+          if let Some(bloom_filter_ndv) = bloom_filter_properties.ndv {
+            properties =
+              properties.set_column_bloom_filter_ndv(column_name.into(), bloom_filter_ndv as u64);
+          }
+        }
+      }
+    }
+  }
+
+  Ok(properties.build())
 }
