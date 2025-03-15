@@ -19,7 +19,7 @@ use napi::{
 use tokio::sync::mpsc::error::SendError;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::{get_runtime, table::JsDeltaTable};
+use crate::{error::JsError, get_runtime, table::JsDeltaTable};
 
 #[napi]
 #[derive(Clone)]
@@ -54,17 +54,16 @@ impl QueryBuilder {
 
     let scan_config = DeltaScanConfigBuilder::default()
       .build(&snapshot)
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
     let provider = Arc::new(
-      DeltaTableProvider::try_new(snapshot, log_store, scan_config)
-        .map_err(|err| napi::Error::from_reason(err.to_string()))?,
+      DeltaTableProvider::try_new(snapshot, log_store, scan_config).map_err(JsError::from)?,
     );
 
     self
       .ctx
       .register_table(table_name, provider)
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
     Ok(self.clone())
   }
@@ -97,16 +96,11 @@ impl QueryResult {
       .ctx
       .sql(self.sql_query.as_str())
       .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
-    let df = df
-      .limit(0, Some(25))
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let df = df.limit(0, Some(25)).map_err(JsError::from)?;
 
-    let results = df
-      .collect()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let results = df.collect().await.map_err(JsError::from)?;
 
     let _ = print_batches(&results);
 
@@ -124,7 +118,7 @@ impl QueryResult {
         let df = self.query_builder.ctx.sql(self.sql_query.as_str()).await?;
         df.execute_stream().await
       })
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
     // FIXME: Make number of batches before blocking configurable
     let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -198,12 +192,9 @@ impl QueryResult {
       .ctx
       .sql(self.sql_query.as_str())
       .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
-    let batches = df
-      .collect()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let batches = df.collect().await.map_err(JsError::from)?;
 
     // Move the JSON serialization to a separate thread
     // This prevents blocking the event loop with CPU-intensive work
@@ -211,14 +202,10 @@ impl QueryResult {
       let mut json_writer = json::Writer::<Vec<u8>, JsonArray>::new(Vec::new());
 
       for batch in batches {
-        json_writer
-          .write(&batch)
-          .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+        json_writer.write(&batch).map_err(JsError::from)?;
       }
 
-      json_writer
-        .finish()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      json_writer.finish().map_err(JsError::from)?;
 
       Ok::<_, napi::Error>(json_writer.into_inner())
     })

@@ -11,11 +11,12 @@ use deltalake::lakefs::LakeFSCustomExecuteHandler;
 use deltalake::operations::vacuum::VacuumBuilder;
 use deltalake::operations::write::WriteBuilder;
 use deltalake::{logstore::LogStoreRef, table::state::DeltaTableState};
-use deltalake::{DeltaTable, DeltaTableBuilder, DeltaTableError};
+use deltalake::{DeltaTable, DeltaTableBuilder};
 use napi::bindgen_prelude::Uint8Array;
 use napi::{Either, Result};
 use tokio::sync::Mutex;
 
+use crate::error::JsError;
 use crate::get_runtime;
 use crate::transaction::{
   maybe_create_commit_properties, JsCommitProperties, JsPostCommitHookProperties,
@@ -114,11 +115,7 @@ impl JsDeltaTable {
   }
 
   pub fn clone_state(&self) -> Result<DeltaTableState> {
-    self.with_table(|t| {
-      t.snapshot()
-        .cloned()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
-    })
+    self.with_table(|t| Ok(t.snapshot().cloned().map_err(JsError::from)?))
   }
 
   pub fn log_store(&self) -> Result<LogStoreRef> {
@@ -150,9 +147,7 @@ impl JsDeltaTable {
             builder = builder.with_version(version);
           }
           Either::B(version) => {
-            builder = builder
-              .with_datestring(version)
-              .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+            builder = builder.with_datestring(version).map_err(JsError::from)?;
           }
         }
       }
@@ -169,11 +164,7 @@ impl JsDeltaTable {
       }
     }
 
-    let table = Arc::new(Mutex::new(
-      builder
-        .build()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))?,
-    ));
+    let table = Arc::new(Mutex::new(builder.build().map_err(JsError::from)?));
 
     Ok(JsDeltaTable { table })
   }
@@ -192,13 +183,11 @@ impl JsDeltaTable {
       builder = builder.with_storage_options(options);
     }
 
-    let table = builder
-      .build()
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let table = builder.build().map_err(JsError::from)?;
     let is_delta_table = table
       .verify_deltatable_existence()
       .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+      .map_err(JsError::from)?;
 
     Ok(is_delta_table)
   }
@@ -208,10 +197,7 @@ impl JsDeltaTable {
   pub async fn load(&self) -> Result<()> {
     let mut table = self.table.lock().await;
 
-    table
-      .load()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    table.load().await.map_err(JsError::from)?;
 
     Ok(())
   }
@@ -229,19 +215,13 @@ impl JsDeltaTable {
   #[napi(catch_unwind)]
   pub async fn get_latest_version(&self) -> Result<i64> {
     let table = self.table.lock().await;
-    table
-      .get_latest_version()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))
+    Ok(table.get_latest_version().await.map_err(JsError::from)?)
   }
 
   #[napi(catch_unwind)]
   pub async fn get_earliest_version(&self) -> Result<i64> {
     let table = self.table.lock().await;
-    table
-      .get_earliest_version()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))
+    Ok(table.get_earliest_version().await.map_err(JsError::from)?)
   }
 
   #[napi(catch_unwind)]
@@ -249,7 +229,7 @@ impl JsDeltaTable {
     self.with_table(|t| {
       Ok(
         t.snapshot()
-          .map_err(|err| napi::Error::from_reason(err.to_string()))?
+          .map_err(JsError::from)?
           .table_config()
           .num_indexed_cols(),
       )
@@ -261,7 +241,7 @@ impl JsDeltaTable {
     self.with_table(|t| {
       Ok(
         t.snapshot()
-          .map_err(|err| napi::Error::from_reason(err.to_string()))?
+          .map_err(JsError::from)?
           .table_config()
           .stats_columns()
           .map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>()),
@@ -276,11 +256,7 @@ impl JsDeltaTable {
 
   #[napi(catch_unwind)]
   pub fn metadata(&self) -> Result<JsDeltaTableMetadata> {
-    let metadata = self.with_table(|t| {
-      t.metadata()
-        .cloned()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
-    })?;
+    let metadata = self.with_table(|t| Ok(t.metadata().cloned().map_err(JsError::from)?))?;
 
     Ok(JsDeltaTableMetadata {
       id: metadata.id.clone(),
@@ -294,11 +270,7 @@ impl JsDeltaTable {
 
   #[napi(catch_unwind)]
   pub fn protocol_versions(&self) -> Result<JsDeltaTableProtocolVersions> {
-    let table_protocol = self.with_table(|t| {
-      t.protocol()
-        .cloned()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
-    })?;
+    let table_protocol = self.with_table(|t| Ok(t.protocol().cloned().map_err(JsError::from)?))?;
 
     let reader_features = table_protocol
       .reader_features
@@ -338,13 +310,15 @@ impl JsDeltaTable {
   /// Get the current schema of the Delta table.
   pub fn schema(&self) -> Result<String> {
     let schema = self.with_table(|t| {
-      t.get_schema()
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
-        .map(|s| s.to_owned())
+      Ok(
+        t.get_schema()
+          .map_err(JsError::from)
+          .map(|s| s.to_owned())?,
+      )
     })?;
 
     // TODO: could return a JS object instead
-    serde_json::to_string(&schema).map_err(|err| napi::Error::from_reason(err.to_string()))
+    Ok(serde_json::to_string(&schema).map_err(JsError::from)?)
   }
 
   /// Run the Vacuum command on the Delta Table: list and delete files no longer
@@ -353,10 +327,7 @@ impl JsDeltaTable {
   pub async fn vacuum(&self, options: Option<DeltaTableVacuumOptions>) -> Result<Vec<String>> {
     let mut table = self.table.lock().await;
     let log_store = table.log_store();
-    let snapshot = table
-      .snapshot()
-      .cloned()
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let snapshot = table.snapshot().cloned().map_err(JsError::from)?;
 
     let mut cmd = VacuumBuilder::new(log_store.clone(), snapshot);
     if let Some(options) = options {
@@ -388,10 +359,7 @@ impl JsDeltaTable {
       cmd = cmd.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
     }
 
-    let (updated_table, metrics) = cmd
-      .into_future()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let (updated_table, metrics) = cmd.into_future().await.map_err(JsError::from)?;
 
     table.state = updated_table.state;
 
@@ -416,32 +384,22 @@ impl JsDeltaTable {
       // Take the Option<state> since it might be the first write,
       // triggered through `write_to_deltalake`
     )
-    .with_save_mode(
-      mode
-        .parse()
-        .map_err(|e: DeltaTableError| napi::Error::from_reason(e.to_string()))?,
-    );
+    .with_save_mode(mode.parse().map_err(JsError::from)?);
 
     let cursor = Cursor::new(data.to_vec());
-    let reader =
-      StreamReader::try_new(cursor, None).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let reader = StreamReader::try_new(cursor, None).map_err(JsError::from)?;
 
-    let table_provider =
-      to_lazy_table(reader).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let table_provider = to_lazy_table(reader).map_err(JsError::from)?;
 
     let plan = LogicalPlanBuilder::scan("source", provider_as_source(table_provider), None)
-      .map_err(|e| napi::Error::from_reason(e.to_string()))?
+      .map_err(JsError::from)?
       .build()
-      .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+      .map_err(JsError::from)?;
 
     builder = builder.with_input_execution_plan(Arc::new(plan));
 
     if let Some(schema_mode) = schema_mode {
-      builder = builder.with_schema_mode(
-        schema_mode
-          .parse()
-          .map_err(|e: DeltaTableError| napi::Error::from_reason(e.to_string()))?,
-      );
+      builder = builder.with_schema_mode(schema_mode.parse().map_err(JsError::from)?);
     }
 
     if let Some(partition_columns) = partition_by {
@@ -454,10 +412,7 @@ impl JsDeltaTable {
       builder = builder.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
     }
 
-    let updated_table = builder
-      .into_future()
-      .await
-      .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    let updated_table = builder.into_future().await.map_err(JsError::from)?;
 
     table.state = updated_table.state;
 

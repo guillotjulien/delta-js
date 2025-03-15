@@ -11,6 +11,8 @@ use tokio::runtime::Runtime;
 #[macro_use]
 mod utils;
 #[rustfmt::skip]
+mod error;
+#[rustfmt::skip]
 mod transaction;
 #[rustfmt::skip]
 mod query;
