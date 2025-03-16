@@ -84,7 +84,7 @@ pub struct JsCommitProperties {
 
 #[napi(object, js_name = "PostCommitHookProperties")]
 pub struct JsPostCommitHookProperties {
-  pub create_checkpoint: bool,
+  pub create_checkpoint: Option<bool>,
   pub cleanup_expired_logs: Option<bool>,
 }
 
@@ -124,8 +124,9 @@ pub fn set_post_commithook_properties(
   mut commit_properties: CommitProperties,
   post_commithook_properties: JsPostCommitHookProperties,
 ) -> CommitProperties {
-  commit_properties =
-    commit_properties.with_create_checkpoint(post_commithook_properties.create_checkpoint);
+  if let Some(create_checkpoint) = post_commithook_properties.create_checkpoint {
+    commit_properties = commit_properties.with_create_checkpoint(create_checkpoint);
+  }
   commit_properties =
     commit_properties.with_cleanup_expired_logs(post_commithook_properties.cleanup_expired_logs);
   commit_properties

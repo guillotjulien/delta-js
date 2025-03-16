@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["./delta/*"],
+  "exclude": ["./delta/native.d.ts"],
+  "compilerOptions": {
+    "stripInternal": true
+  }
+}

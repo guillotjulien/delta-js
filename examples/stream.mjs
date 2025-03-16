@@ -1,5 +1,5 @@
 import { Readable } from "stream";
-import { DeltaTable, QueryBuilder } from "../index.js";
+import { DeltaTable, QueryBuilder } from "../build/index.js";
 
 const table = new DeltaTable("./tests/resources/covid-19");
 

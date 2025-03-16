@@ -1,7 +1,11 @@
 [package]
-edition = "2021"
-name = "delta-js_delta-js"
+name = "delta-js"
 version = "0.0.0"
+authors = ["Julien Guillot"]
+edition = "2021"
+homepage = "https://github.com/guillotjulien/delta-js"
+repository = "https://github.com/guillotjulien/delta-js"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -14,7 +18,7 @@ napi = { version = "3.0.0-alpha.25", default-features = false, features = [
     "serde-json",
     "web_stream",
 ] }
-napi-derive = "3.0.0-alpha.23"
+napi-derive = { version = "3.0.0-alpha.23" }
 deltalake = { version = "0.25.0", features = ["s3", "datafusion", "lakefs"] }
 futures = "0.3"
 tokio = { version = "1.33.0" }
@@ -29,4 +33,5 @@ arrow-schema = { version = "54.2.1", features = ["serde"] }
 napi-build = "2.0.1"
 
 [profile.release]
-lto = true
+codegen-units = 1
+lto = "fat"

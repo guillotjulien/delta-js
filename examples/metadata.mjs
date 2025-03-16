@@ -1,4 +1,4 @@
-import { DeltaTable } from "../index.js";
+import { DeltaTable } from "../build/index.js";
 
 const path = "./tests/resources/test-table";
 if (!(await DeltaTable.isDeltaTable(path))) {
@@ -12,4 +12,4 @@ await table.load();
 console.log(table.version());
 console.log(table.schema());
 console.log(table.metadata());
-console.log(table.protocolVersions());
+console.log(table.protocol());

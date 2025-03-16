@@ -19,28 +19,28 @@ use napi::{
 use tokio::sync::mpsc::error::SendError;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::{error::JsError, get_runtime, table::JsDeltaTable};
+use crate::{error::JsError, get_runtime, table::RawDeltaTable};
 
 #[napi]
 #[derive(Clone)]
-pub struct QueryBuilder {
+pub struct RawQueryBuilder {
   ctx: SessionContext,
 }
 
 #[napi]
-pub struct QueryResult {
-  query_builder: QueryBuilder,
+pub struct RawCursor {
+  query_builder: RawQueryBuilder,
   sql_query: String,
 }
 
 #[napi]
-impl QueryBuilder {
+impl RawQueryBuilder {
   #[napi(constructor)]
   pub fn new() -> Self {
     let config = DeltaSessionConfig::default().into();
     let ctx = SessionContext::new_with_config(config);
 
-    QueryBuilder { ctx }
+    RawQueryBuilder { ctx }
   }
 
   #[napi(catch_unwind)]
@@ -48,7 +48,11 @@ impl QueryBuilder {
   ///
   /// Once called, the provided `delta_table` will be referenceable in SQL queries so long as
   /// another table of the same name is not registered over it.
-  pub fn register(&self, table_name: String, delta_table: &JsDeltaTable) -> Result<QueryBuilder> {
+  pub fn register(
+    &self,
+    table_name: String,
+    delta_table: &RawDeltaTable,
+  ) -> Result<RawQueryBuilder> {
     let snapshot = delta_table.clone_state()?;
     let log_store = delta_table.log_store()?;
 
@@ -70,8 +74,8 @@ impl QueryBuilder {
 
   #[napi(catch_unwind)]
   /// Prepares the sql query to be executed.
-  pub fn sql(&self, sql_query: String) -> QueryResult {
-    QueryResult {
+  pub fn sql(&self, sql_query: String) -> RawCursor {
+    RawCursor {
       query_builder: self.clone(),
       sql_query,
     }
@@ -79,10 +83,10 @@ impl QueryBuilder {
 }
 
 #[napi]
-impl QueryResult {
+impl RawCursor {
   #[napi(constructor)]
-  pub fn new(query_builder: &QueryBuilder, sql_query: String) -> Self {
-    QueryResult {
+  pub fn new(query_builder: &RawQueryBuilder, sql_query: String) -> Self {
+    RawCursor {
       query_builder: query_builder.clone(),
       sql_query,
     }

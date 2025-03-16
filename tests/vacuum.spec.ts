@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { mkdtemp, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
-import { DeltaTable } from "..";
+import { DeltaTable } from "../delta";
 
 let tmpDir: string;
 

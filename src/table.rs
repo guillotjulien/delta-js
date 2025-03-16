@@ -100,17 +100,10 @@ pub struct DeltaTableVacuumOptions {
 }
 
 #[napi(object)]
-pub struct DeltaTableWriteOptions {
-  pub schema_mode: Option<String>,
-  pub partition_by: Option<Vec<String>>,
-  pub predicate: Option<String>,
-  pub target_file_size: Option<u8>,
-  pub name: Option<String>,
-  pub description: Option<String>,
-  pub configuration: Option<HashMap<String, Option<String>>>,
-  pub writer_properties: Option<JsWriterProperties>,
-  pub commit_properties: Option<JsCommitProperties>,
-  pub post_commithook_properties: Option<JsPostCommitHookProperties>,
+pub struct ColumnProperties {
+  pub dictionary_enabled: Option<bool>,
+  pub statistics_enabled: Option<String>,
+  pub bloom_filter_properties: Option<BloomFilterProperties>,
 }
 
 #[napi(object, js_name = "WriterProperties")]
@@ -127,10 +120,17 @@ pub struct JsWriterProperties {
 }
 
 #[napi(object)]
-pub struct ColumnProperties {
-  pub dictionary_enabled: Option<bool>,
-  pub statistics_enabled: Option<String>,
-  pub bloom_filter_properties: Option<BloomFilterProperties>,
+pub struct DeltaTableWriteOptions {
+  pub schema_mode: Option<String>,
+  pub partition_by: Option<Vec<String>>,
+  pub predicate: Option<String>,
+  pub target_file_size: Option<u8>,
+  pub name: Option<String>,
+  pub description: Option<String>,
+  pub configuration: Option<HashMap<String, Option<String>>>,
+  pub writer_properties: Option<JsWriterProperties>,
+  pub commit_properties: Option<JsCommitProperties>,
+  pub post_commithook_properties: Option<JsPostCommitHookProperties>,
 }
 
 #[napi(object)]
@@ -140,13 +140,13 @@ pub struct BloomFilterProperties {
   pub ndv: Option<i64>,
 }
 
-#[napi(js_name = "DeltaTable")]
-pub struct JsDeltaTable {
+#[napi]
+pub struct RawDeltaTable {
   table: Arc<Mutex<DeltaTable>>,
 }
 
 /// Those methods are internal and shouldn't be exposed to the JS API
-impl JsDeltaTable {
+impl RawDeltaTable {
   /// Internal helper method which allows for acquiring the lock on the underlying
   /// [deltalake::DeltaTable] and then executing the given function parameter with the guarded
   /// reference
@@ -168,7 +168,7 @@ impl JsDeltaTable {
 }
 
 #[napi]
-impl JsDeltaTable {
+impl RawDeltaTable {
   #[napi(constructor)]
   /// Create the Delta table from a path with an optional version.
   /// Multiple StorageBackends are currently supported: AWS S3 and local URI.
@@ -210,7 +210,7 @@ impl JsDeltaTable {
 
     let table = Arc::new(Mutex::new(builder.build().map_err(JsError::from)?));
 
-    Ok(JsDeltaTable { table })
+    Ok(RawDeltaTable { table })
   }
 
   /// Currently it'll fail if the first entry in your _delta_log is a CRC file.

@@ -9,7 +9,7 @@ export interface CommitProperties {
   appTransactions?: Array<Transaction>
 }
 export interface PostCommitHookProperties {
-  createCheckpoint: boolean
+  createCheckpoint?: boolean
   cleanupExpiredLogs?: boolean
 }
 export interface DeltaTableOptions {
@@ -72,6 +72,39 @@ export interface DeltaTableVacuumOptions {
   /** Properties for the post commit hook. If null, default values are used. */
   postCommithookProperties?: PostCommitHookProperties
 }
+export interface ColumnProperties {
+  dictionaryEnabled?: boolean
+  statisticsEnabled?: string
+  bloomFilterProperties?: BloomFilterProperties
+}
+export interface WriterProperties {
+  dataPageSizeLimit?: number
+  dictionaryPageSizeLimit?: number
+  dataPageRowCountLimit?: number
+  writeBatchSize?: number
+  maxRowGroupSize?: number
+  statisticsTruncateLength?: number
+  compression?: string
+  defaultColumnProperties?: ColumnProperties
+  columnProperties?: Record<string, ColumnProperties | undefined | null>
+}
+export interface DeltaTableWriteOptions {
+  schemaMode?: string
+  partitionBy?: Array<string>
+  predicate?: string
+  targetFileSize?: number
+  name?: string
+  description?: string
+  configuration?: Record<string, string | undefined | null>
+  writerProperties?: WriterProperties
+  commitProperties?: CommitProperties
+  postCommithookProperties?: PostCommitHookProperties
+}
+export interface BloomFilterProperties {
+  setBloomFilterEnabled?: boolean
+  fpp?: number
+  ndv?: number
+}
 export type JsTransaction = Transaction
 export class Transaction {
   appId: string
@@ -79,7 +112,7 @@ export class Transaction {
   lastUpdated?: number
   constructor(appId: string, version: number, lastUpdated?: number | undefined | null)
 }
-export class QueryBuilder {
+export class RawQueryBuilder {
   constructor()
   /**
    * Register the given [DeltaTable] into the [SessionContext] using the provided `table_name`
@@ -87,12 +120,12 @@ export class QueryBuilder {
    * Once called, the provided `delta_table` will be referenceable in SQL queries so long as
    * another table of the same name is not registered over it.
    */
-  register(tableName: string, deltaTable: JsDeltaTable): QueryBuilder
+  register(tableName: string, deltaTable: RawDeltaTable): RawQueryBuilder
   /** Prepares the sql query to be executed. */
-  sql(sqlQuery: string): QueryResult
+  sql(sqlQuery: string): RawCursor
 }
-export class QueryResult {
-  constructor(queryBuilder: QueryBuilder, sqlQuery: string)
+export class RawCursor {
+  constructor(queryBuilder: RawQueryBuilder, sqlQuery: string)
   /** Print the first 25 rows returned by the SQL query */
   show(): Promise<void>
   /**
@@ -111,8 +144,7 @@ export class QueryResult {
    */
   fetchAll(): Promise<Buffer>
 }
-export type JsDeltaTable = DeltaTable
-export class DeltaTable {
+export class RawDeltaTable {
   /**
    * Create the Delta table from a path with an optional version.
    * Multiple StorageBackends are currently supported: AWS S3 and local URI.
@@ -143,7 +175,7 @@ export class DeltaTable {
   getStatsColumns(): Array<string> | null
   hasFiles(): boolean
   metadata(): DeltaTableMetadata
-  protocolVersions(): DeltaTableProtocolVersions
+  protocol(): DeltaTableProtocolVersions
   /** Get the current schema of the Delta table. */
   schema(): string
   /**
@@ -151,5 +183,5 @@ export class DeltaTable {
    * referenced by the Delta table and are older than the retention threshold.
    */
   vacuum(options?: DeltaTableVacuumOptions | undefined | null): Promise<Array<string>>
-  write(data: Uint8Array, mode: string, schemaMode?: string | undefined | null, partitionBy?: Array<string> | undefined | null): Promise<void>
+  write(data: Uint8Array, mode: string, options?: DeltaTableWriteOptions | undefined | null): Promise<void>
 }

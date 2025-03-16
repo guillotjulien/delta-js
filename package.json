@@ -1,8 +1,35 @@
 {
-  "name": "@delta-js/delta-js",
+  "name": "delta-js",
   "version": "0.0.0",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "repository": "https://github.com/guillotjulien/delta-js.git",
+  "license": "Apache-2.0",
+  "main": "build/index.js",
+  "files": [
+    "build"
+  ],
+  "keywords": [
+    "delta",
+    "deltalake",
+    "data-processing",
+    "rust"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release --dts native.d.ts --js native.js delta",
+    "build:debug": "napi build --platform --dts native.d.ts --js native.js delta",
+    "build:ts": " rm -rf build/; tsc -p tsconfig.build.json; cp ./delta/*.node build/",
+    "prepublishOnly": "napi prepublish -t npm",
+    "universal": "napi universal",
+    "version": "napi version",
+    "test": "vitest"
+  },
   "napi": {
     "name": "delta-js",
     "triples": {
@@ -14,27 +41,15 @@
       ]
     }
   },
-  "license": "MIT",
+  "dependencies": {
+    "apache-arrow": "^19.0.1"
+  },
   "devDependencies": {
     "@napi-rs/cli": "^2.17.0",
     "@types/node": "^22.13.10",
     "prettier": "^3.5.3",
+    "typedoc": "^0.28.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8"
-  },
-  "engines": {
-    "node": ">= 18"
-  },
-  "scripts": {
-    "artifacts": "napi artifacts",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
-    "prepublishOnly": "napi prepublish -t npm",
-    "universal": "napi universal",
-    "version": "napi version",
-    "test": "vitest"
-  },
-  "dependencies": {
-    "apache-arrow": "^19.0.1"
   }
 }

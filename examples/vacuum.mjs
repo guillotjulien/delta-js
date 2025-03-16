@@ -1,6 +1,6 @@
-import { DeltaTable } from "../index.js";
+import { DeltaTable } from "../build/index.js";
 
-const table = new DeltaTable("./tests/resources/test-table");
+const table = new DeltaTable("./tests/resources/simple_table");
 
 await table.load();
 
