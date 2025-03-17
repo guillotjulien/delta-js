@@ -1,6 +1,21 @@
 import { RawCursor, RawQueryBuilder } from "../native";
 import { DeltaTable } from "../table";
 
+/**
+ * Query builder is an API that exposes Apache DataFusion SQL as a convenient
+ * way to read from the table.
+ *
+ * @example
+ * ```ts
+ * const table = new DeltaTable("...");
+ * await table.load();
+ *
+ * const qb = new QueryBuilder().register("my_table", table);
+ * const query = qb.sql("select * from my_table");
+ *
+ * await query.show();
+ * ```
+ */
 export class QueryBuilder {
   /** @internal */
   private readonly qb: RawQueryBuilder;
@@ -10,7 +25,7 @@ export class QueryBuilder {
   }
 
   /**
-   * Register the given [DeltaTable] into the [SessionContext] using the provided `tableName`
+   * Register the given {@link DeltaTable} into the DataFusion SessionContext using the provided `tableName`
    *
    * Once called, the provided `deltaTable` will be referenceable in SQL queries so long as
    * another table of the same name is not registered over it.
@@ -32,17 +47,19 @@ export interface Cursor {
   show(): Promise<void>;
 
   /**
-   * Execute the given SQL command within the [SessionContext] of this instance
+   * Execute the given SQL command within the DataFusion SessionContext of this instance.
    *
-   * **NOTE:** The function returns the rows as a continuous, newline delimited, stream of JSON strings
+   * @remarks
+   * The function returns the rows as a continuous, newline delimited, stream of JSON strings
    * it is especially suited to deal with large results set.
    */
   stream(): ReadableStream<Buffer>;
 
   /**
-   * Execute the given SQL command within the [SessionContext] of this instance
+   * Execute the given SQL command within the DataFusion SessionContext of this instance.
    *
-   * **NOTE:** Since this function returns a materialized JS Buffer,
+   * @remarks
+   * Since this function returns a materialized JS Buffer,
    * it may result unexpected memory consumption for queries which return large data
    * sets.
    */

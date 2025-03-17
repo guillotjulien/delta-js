@@ -25,6 +25,7 @@
     "build": "napi build --platform --release --dts native.d.ts --js native.js delta",
     "build:debug": "napi build --platform --dts native.d.ts --js native.js delta",
     "build:ts": " rm -rf build/; tsc -p tsconfig.build.json; cp ./delta/*.node build/",
+    "build:doc": "typedoc --excludeInternal delta/index.ts",
     "prepublishOnly": "napi prepublish -t npm",
     "universal": "napi universal",
     "version": "napi version",

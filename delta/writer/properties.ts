@@ -9,7 +9,7 @@ export enum Compression {
 }
 
 /** Bloom filter properties for the Rust parquet writer. */
-interface BloomFilterProperties {
+export interface BloomFilterProperties {
   /** If true and no fpp or ndv are provided, the default values will be used. */
   setBloomFilterEnabled?: boolean;
 
