@@ -4,6 +4,7 @@ import { DeltaTable } from "../table";
 /**
  * Query builder is an API that exposes Apache DataFusion SQL as a convenient
  * way to read from the table.
+ * @experimental this API might be removed in the future, use at your own risk
  *
  * @example
  * ```ts
@@ -42,6 +43,9 @@ export class QueryBuilder {
   }
 }
 
+/**
+ * @experimental this API might be removed in the future, use at your own risk
+ */
 export interface Cursor {
   /** Print the first 25 rows returned by the SQL query */
   show(): Promise<void>;

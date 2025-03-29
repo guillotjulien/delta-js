@@ -486,7 +486,9 @@ impl RawDeltaTable {
       builder = builder.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
     }
 
-    let updated_table = builder.into_future().await.map_err(JsError::from)?;
+    // FIXME: when rewriting: VersionAlreadyExists(0)
+    // let updated_table = builder.into_future().await.map_err(JsError::from)?;
+    let updated_table = builder.into_future().await.unwrap();
 
     table.state = updated_table.state;
 

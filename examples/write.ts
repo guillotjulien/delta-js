@@ -1,7 +1,7 @@
 import { Uint8, Utf8 } from "apache-arrow";
 import { Schema, Field } from "apache-arrow/schema";
 
-import { DeltaTable, WriteMode } from "../build/index.js";
+import { DeltaTable, WriteMode } from "../build";
 
 const schema = new Schema([
   Field.new("id", new Uint8(), false),
@@ -16,9 +16,9 @@ const data = [
   { id: 4, name: "Jean", age: 27 },
 ];
 
-const table = new DeltaTable("./test-table");
+(async () => {
+  const table = new DeltaTable("./test-table");
+  await table.write(data, WriteMode.Overwrite, schema);
 
-// FIXME: Why does this throw an error in JS, but not in TS even though the generated code is similar???
-await table.write(data, WriteMode.Overwrite, schema);
-
-console.log(`Version: ${table.version()}`);
+  console.log(`Version: ${table.version()}`);
+})();

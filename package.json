@@ -3,15 +3,14 @@
   "version": "0.0.0",
   "repository": "https://github.com/guillotjulien/delta-js.git",
   "license": "Apache-2.0",
-  "main": "build/index.js",
-  "files": [
-    "build"
-  ],
   "keywords": [
     "delta",
     "deltalake",
     "data-processing",
     "rust"
+  ],
+  "files": [
+    "build"
   ],
   "engines": {
     "node": ">= 18"
@@ -22,8 +21,8 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release --dts native.d.ts --js native.js delta",
-    "build:debug": "napi build --platform --dts native.d.ts --js native.js delta",
+    "build": "napi build --platform --release --dts native.d.ts --js native.js delta && npm run build:ts",
+    "build:debug": "napi build --platform --dts native.d.ts --js native.js delta && npm run build:ts",
     "build:ts": " rm -rf build/; tsc -p tsconfig.build.json; cp ./delta/*.node build/",
     "build:doc": "typedoc --excludeInternal delta/index.ts",
     "prepublishOnly": "napi prepublish -t npm",

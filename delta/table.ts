@@ -1,4 +1,14 @@
-import * as arrow from "apache-arrow";
+import {
+  RecordBatch,
+  Schema as ArrowSchema,
+  Table as ArrowTable,
+  tableToIPC,
+  vectorFromArray,
+  tableFromIPC,
+  tableFromJSON,
+  Vector,
+  tableFromArrays,
+} from "apache-arrow";
 
 import { RawDeltaTable } from "./native";
 import { CommitProperties, PostCommitHookProperties } from "./transaction";
@@ -227,16 +237,29 @@ export class DeltaTable {
    *
    * @param data Array of rows - will be converted to Arrow IPC buffer
    * @param mode How to handle existing data. Default is to error if table already exists.
+   * @param schema Optional Arrow schema. If not provided, schema will be infered.
    * @param options
    */
-  write(
+  async write(
     data: Record<string, unknown>[],
     mode: WriteMode,
-    // TODO: We'll want to specify the schema manually here
+    schema?: ArrowSchema,
     options?: WriteOptions,
   ): Promise<void> {
-    const arrowData = arrow.tableFromJSON(data);
-    return this._table.write(arrow.tableToIPC(arrowData), mode, options);
+    let table: ArrowTable;
+    if (!schema) {
+      table = tableFromJSON(data);
+    } else {
+      const vectors: Record<string, Vector<any>> = {};
+      schema.fields.forEach((field) => {
+        const fieldData = data.map((d) => d[field.name]);
+        vectors[field.name] = vectorFromArray(fieldData, field.type);
+      });
+
+      table = tableFromArrays(vectors as any);
+    }
+
+    return this._table.write(tableToIPC(table), mode, options);
   }
 
   /**
