@@ -213,9 +213,6 @@ impl RawDeltaTable {
     Ok(RawDeltaTable { table })
   }
 
-  /// Currently it'll fail if the first entry in your _delta_log is a CRC file.
-  /// See https://github.com/delta-io/delta-rs/issues/3115
-  /// Fix here: https://github.com/delta-io/delta-rs/pull/3122
   #[napi(catch_unwind)]
   pub async fn is_delta_table(
     table_uri: String,
@@ -235,7 +232,6 @@ impl RawDeltaTable {
 
     Ok(is_delta_table)
   }
-
   #[napi(catch_unwind)]
   /// Build the DeltaTable and load its state
   pub async fn load(&self) -> Result<()> {
@@ -420,6 +416,19 @@ impl RawDeltaTable {
     let mut table = self.table.lock().await;
     let log_store = table.log_store();
 
+    // FIXME: Doesn't this kinda defeat the purpose of the without_files flag?
+    // When table isn't already loaded and exists, we need to load it first
+    if table.version() == -1 {
+      let is_delta_table = table
+        .verify_deltatable_existence()
+        .await
+        .map_err(JsError::from)?;
+
+      if is_delta_table {
+        table.load().await.map_err(JsError::from)?;
+      }
+    }
+
     let mut builder = WriteBuilder::new(
       log_store.clone(),
       table.state.clone(),
@@ -486,9 +495,7 @@ impl RawDeltaTable {
       builder = builder.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
     }
 
-    // FIXME: when rewriting: VersionAlreadyExists(0)
-    // let updated_table = builder.into_future().await.map_err(JsError::from)?;
-    let updated_table = builder.into_future().await.unwrap();
+    let updated_table = builder.into_future().await.map_err(JsError::from)?;
 
     table.state = updated_table.state;
 
