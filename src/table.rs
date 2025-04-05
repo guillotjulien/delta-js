@@ -380,10 +380,7 @@ impl RawDeltaTable {
       }
 
       if let Some(retention_period) = options.retention_hours {
-        assert_napi!(
-          retention_period >= 0,
-          "retention hours should be null or greater or equal to 0"
-        );
+        assert_napi!(retention_period >= 0, "retention hours should be positive");
         cmd = cmd.with_retention_period(Duration::hours(retention_period));
       }
 
@@ -399,6 +396,7 @@ impl RawDeltaTable {
       cmd = cmd.with_custom_execute_handler(Arc::new(LakeFSCustomExecuteHandler {}))
     }
 
+    // GenericError { source: InvalidVacuumRetentionPeriod { provided: 167, min: 168 } }
     let (updated_table, metrics) = cmd.into_future().await.map_err(JsError::from)?;
 
     table.state = updated_table.state;

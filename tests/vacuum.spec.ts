@@ -69,9 +69,7 @@ test("it returns an error when retentionHours is negative", async () => {
     retentionHours: -1,
   });
 
-  await expect(promise).rejects.toThrow(
-    "retention hours should be null or greater or equal to 0",
-  );
+  await expect(promise).rejects.toThrow("retention hours should be positive");
 });
 
 test("it returns an error when retentionHours is lower than delta.deletedFileRetentionDuration", async () => {
