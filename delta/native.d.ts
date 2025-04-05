@@ -169,6 +169,7 @@ export class RawDeltaTable {
   getNumIndexCols(): number
   getStatsColumns(): Array<string> | null
   hasFiles(): boolean
+  files(): Promise<Array<string>>
   metadata(): DeltaTableMetadata
   protocol(): DeltaTableProtocolVersions
   /** Get the current schema of the Delta table. */

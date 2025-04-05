@@ -214,6 +214,16 @@ export class DeltaTable {
     return this._table.schema();
   }
 
+  /**
+   * Get the .parquet files of the DeltaTable.
+   *
+   * The paths are as they are saved in the delta log, which may either be
+   * relative to the table root or absolute URIs.
+   */
+  async files(): Promise<string[]> {
+    return this._table.files();
+  }
+
   /** Get the current metadata of the DeltaTable. */
   metadata(): Metadata {
     return this._table.metadata();

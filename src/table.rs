@@ -295,6 +295,28 @@ impl RawDeltaTable {
   }
 
   #[napi(catch_unwind)]
+  pub async fn files(&self) -> Result<Vec<String>> {
+    let table = self.table.lock().await;
+
+    if !table.config.require_files {
+      return Err(
+        JsError::from(DeltaTableError::Generic(
+          "Table is instantiated without files".into(),
+        ))
+        .into(),
+      );
+    }
+
+    let files: Vec<String> = table
+      .get_files_iter()
+      .map_err(JsError::from)?
+      .map(|f| f.to_string())
+      .collect();
+
+    Ok(files)
+  }
+
+  #[napi(catch_unwind)]
   pub fn metadata(&self) -> Result<JsDeltaTableMetadata> {
     let metadata = self.with_table(|t| Ok(t.metadata().cloned().map_err(JsError::from)?))?;
 

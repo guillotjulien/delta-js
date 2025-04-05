@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import { mkdtemp, rmdir } from "node:fs/promises";
+import { mkdtemp, readdir, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
-import { DeltaTable } from "../delta";
+import { DeltaTable, WriteMode } from "../delta";
 
 let tmpDir: string;
 
@@ -100,9 +100,32 @@ test("it returns deleted files when retention period is lower than delta.deleted
 });
 
 test("it only keep last version when retentionHours is set to 0 and dryRun is false", async () => {
-  // TODO: For that we need the write_deltalake function to be implemented
+  const dt = new DeltaTable(tmpDir);
+
+  await dt.write([{ id: 1 }], WriteMode.Overwrite);
+
+  const originalFiles = new Set(await dt.files());
+
+  await dt.write([{ id: 1 }, { id: 2 }], WriteMode.Overwrite);
+
+  const newFiles = new Set(await dt.files());
+
+  const tombstones = await dt.vacuum({
+    retentionHours: 0,
+    enforceRetentionDuration: false,
+  });
+
+  const tableFiles = (await readdir(tmpDir)).filter((path) =>
+    path.endsWith(".parquet"),
+  );
+
+  expect(originalFiles.intersection(newFiles).size).toEqual(0);
+  expect(new Set(tombstones).symmetricDifference(originalFiles).size).toEqual(
+    0,
+  );
+  expect(new Set(tableFiles).symmetricDifference(newFiles).size).toEqual(0);
 });
 
 test("it saves the provided metadata in transaction log", async () => {
-  // TODO: For that we need the write_deltalake function to be implemented
+  // TODO: For that we need the table.history function to be implemented
 });

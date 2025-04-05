@@ -3,6 +3,8 @@
   "include": ["./delta/*"],
   "exclude": ["./delta/native.d.ts"],
   "compilerOptions": {
+    "target": "es2023",
+    "lib": [],
     "stripInternal": true
   }
 }
