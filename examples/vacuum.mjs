@@ -13,3 +13,4 @@ console.log(
   }),
 );
 console.log(`New version: ${table.version()}`);
+console.log(await table.history());

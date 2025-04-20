@@ -164,16 +164,13 @@ export class RawDeltaTable {
   load(): Promise<void>
   tableUri(): string
   version(): number
-  getLatestVersion(): Promise<number>
-  getEarliestVersion(): Promise<number>
-  getNumIndexCols(): number
-  getStatsColumns(): Array<string> | null
   hasFiles(): boolean
   files(): Promise<Array<string>>
   metadata(): DeltaTableMetadata
   protocol(): DeltaTableProtocolVersions
   /** Get the current schema of the Delta table. */
   schema(): string
+  history(limit?: number | undefined | null): Promise<Array<string>>
   /**
    * Run the Vacuum command on the Delta Table: list and delete files no longer
    * referenced by the Delta table and are older than the retention threshold.

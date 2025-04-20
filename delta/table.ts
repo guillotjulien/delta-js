@@ -235,6 +235,17 @@ export class DeltaTable {
   }
 
   /**
+   * Run the history command on the DeltaTable.
+   * The operations are returned in reverse chronological order.
+   * 
+   * @param limit the maximum number of commits to return
+   * @returns array of commit infos registered in the transaction log
+   */
+  async history(limit?: number): Promise<string[]> {
+    return this._table.history(limit);
+  }
+
+  /**
    * Run the Vacuum command on the Delta Table: list and delete files no longer
    * referenced by the Delta table and are older than the retention threshold.
    */

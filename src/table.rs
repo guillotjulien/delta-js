@@ -165,6 +165,39 @@ impl RawDeltaTable {
   pub fn log_store(&self) -> Result<LogStoreRef> {
     self.with_table(|t| Ok(t.log_store().clone()))
   }
+
+  pub async fn get_latest_version(&self) -> Result<i64> {
+    let table = self.table.lock().await;
+    Ok(table.get_latest_version().await.map_err(JsError::from)?)
+  }
+
+  pub async fn get_earliest_version(&self) -> Result<i64> {
+    let table = self.table.lock().await;
+    Ok(table.get_earliest_version().await.map_err(JsError::from)?)
+  }
+
+  pub fn get_stats_columns(&self) -> Result<Option<Vec<String>>> {
+    self.with_table(|t| {
+      Ok(
+        t.snapshot()
+          .map_err(JsError::from)?
+          .table_config()
+          .stats_columns()
+          .map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>()),
+      )
+    })
+  }
+
+  pub fn get_num_index_cols(&self) -> Result<i32> {
+    self.with_table(|t| {
+      Ok(
+        t.snapshot()
+          .map_err(JsError::from)?
+          .table_config()
+          .num_indexed_cols(),
+      )
+    })
+  }
 }
 
 #[napi]
@@ -232,6 +265,7 @@ impl RawDeltaTable {
 
     Ok(is_delta_table)
   }
+
   #[napi(catch_unwind)]
   /// Build the DeltaTable and load its state
   pub async fn load(&self) -> Result<()> {
@@ -253,47 +287,11 @@ impl RawDeltaTable {
   }
 
   #[napi(catch_unwind)]
-  pub async fn get_latest_version(&self) -> Result<i64> {
-    let table = self.table.lock().await;
-    Ok(table.get_latest_version().await.map_err(JsError::from)?)
-  }
-
-  #[napi(catch_unwind)]
-  pub async fn get_earliest_version(&self) -> Result<i64> {
-    let table = self.table.lock().await;
-    Ok(table.get_earliest_version().await.map_err(JsError::from)?)
-  }
-
-  #[napi(catch_unwind)]
-  pub fn get_num_index_cols(&self) -> Result<i32> {
-    self.with_table(|t| {
-      Ok(
-        t.snapshot()
-          .map_err(JsError::from)?
-          .table_config()
-          .num_indexed_cols(),
-      )
-    })
-  }
-
-  #[napi(catch_unwind)]
-  pub fn get_stats_columns(&self) -> Result<Option<Vec<String>>> {
-    self.with_table(|t| {
-      Ok(
-        t.snapshot()
-          .map_err(JsError::from)?
-          .table_config()
-          .stats_columns()
-          .map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>()),
-      )
-    })
-  }
-
-  #[napi(catch_unwind)]
   pub fn has_files(&self) -> Result<bool> {
     self.with_table(|t| Ok(t.config.require_files))
   }
 
+  // FIXME: partition filters
   #[napi(catch_unwind)]
   pub async fn files(&self) -> Result<Vec<String>> {
     let table = self.table.lock().await;
@@ -381,6 +379,20 @@ impl RawDeltaTable {
 
     // TODO: could return a JS object instead
     Ok(serde_json::to_string(&schema).map_err(JsError::from)?)
+  }
+
+  #[napi(catch_unwind)]
+  pub async fn history(&self, limit: Option<u8>) -> Result<Vec<String>> {
+    let table = self.table.lock().await;
+    let history = table.history(limit.map(|l| l as usize))
+      .await
+      .map_err(JsError::from)
+      .map(|s| s.to_owned())?;
+
+    Ok(history
+        .iter()
+        .map(|c| serde_json::to_string(c).map_err(JsError::from).unwrap())
+        .collect())
   }
 
   /// Run the Vacuum command on the Delta Table: list and delete files no longer
