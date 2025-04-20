@@ -25,7 +25,7 @@ test("it returns deleted files", async () => {
     retentionHours: 169,
   });
 
-  expect(tombstones).toEqual([
+  const expected = [
     "part-00000-a72b1fb3-f2df-41fe-a8f0-e65b746382dd-c000.snappy.parquet",
     "part-00121-d8bc3e53-d2f2-48ce-9909-78da7294ffbd-c000.snappy.parquet",
     "part-00068-90650739-6a8e-492b-9403-53e33b3778ac-c000.snappy.parquet",
@@ -57,7 +57,9 @@ test("it returns deleted files", async () => {
     "part-00077-2fcb1c7c-5390-48ee-93f6-0acf11199a0d-c000.snappy.parquet",
     "part-00004-80938522-09c0-420c-861f-5a649e3d9674-c000.snappy.parquet",
     "part-00116-bc66759e-6381-4f34-8cd4-6688aad8585d-c000.snappy.parquet",
-  ]);
+  ];
+
+  expect(tombstones.sort()).toEqual(expected.sort());
 });
 
 test("it returns an error when retentionHours is negative", async () => {
